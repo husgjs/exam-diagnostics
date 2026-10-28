@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>逐题得分录入</title>
+<style>
+  :root{
+    --ink:#1b2330;--ink2:#5a6577;--line:#dfe5ee;--bg:#f4f6fa;--card:#fff;
+    --blue:#2f6fed;--blue-d:#1f57c8;--green:#17a673;--amber:#b8791a;--amber-bg:#fff6e0;
+    --red:#d9483f;--red-bg:#fdf1f0;--shadow:0 1px 2px rgba(27,35,48,.06),0 8px 24px rgba(27,35,48,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);padding:16px 14px 84px;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
+  .wrap{max-width:1240px;margin:0 auto}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{margin:0;color:var(--ink2);font-size:13.5px}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 12px}
+  .grow{flex:1 1 auto}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;
+    border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn:hover{background:#f7f9fc}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-d)}
+  .btn.small{padding:5px 12px;font-size:13px;font-weight:500}
+  input[type=text],textarea,select{font:inherit;padding:8px 11px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;color:var(--ink);width:100%}
+  input[type=text]:focus,textarea:focus{outline:2px solid #cfe0ff;border-color:var(--blue)}
+
+  .card{background:var(--card);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:12px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--ink2);font-weight:600}
+  .card h3 .more{font-weight:400;color:#98a3b4}
+
+  .note{background:var(--amber-bg);border:1px solid #f0ddb3;border-radius:10px;padding:11px 14px;
+    font-size:13.5px;color:#7a5714;margin:0 0 12px}
+  .note b{color:#5d4110}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .mini{font-size:13px;color:var(--ink2)}
+  .hint{font-size:12.5px;color:#98a3b4}
+  textarea{min-height:120px;resize:vertical;font-family:inherit}
+
+  .qlist{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:9px;padding:6px 8px;background:#fcfdff}
+  .qrow{display:flex;align-items:center;gap:9px;padding:4px 2px;font-size:13.5px;border-bottom:1px dashed #eef2f8}
+  .qrow:last-child{border-bottom:0}
+  .qrow input{width:auto;margin:0}
+  .qno{font-weight:700;min-width:52px;font-variant-numeric:tabular-nums}
+  .qkp{flex:1 1 auto;color:var(--ink)}
+  .qmeta{color:#98a3b4;font-size:12px;white-space:nowrap}
+
+  .tablewrap{background:var(--card);border-radius:12px;box-shadow:var(--shadow);overflow:auto;max-height:62vh}
+  table{border-collapse:separate;border-spacing:0;width:100%}
+  th,td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;font-size:14px}
+  thead th{position:sticky;top:0;z-index:2;background:#f7f9fc;color:var(--ink2);font-weight:600;
+    font-size:12.5px;padding:7px 6px;text-align:center;white-space:nowrap}
+  thead th .qn{display:block;font-size:12px;color:var(--ink);font-weight:700}
+  thead th .qf{display:block;font-size:11px;color:#98a3b4}
+  tbody th{position:sticky;left:0;z-index:1;background:#fbfcfe;text-align:left;padding:6px 10px;
+    font-weight:500;white-space:nowrap;min-width:110px}
+  tbody th .idx{color:#b6c0ce;font-size:11.5px;margin-right:6px;font-variant-numeric:tabular-nums}
+  input.cell{width:100%;border:0;border-radius:0;text-align:center;padding:8px 2px;
+    font:inherit;font-variant-numeric:tabular-nums;background:#fff;color:var(--ink)}
+  input.cell:focus{outline:2px solid var(--blue);outline-offset:-2px;background:#f7faff}
+  input.cell.filled{background:#f3f8ff}
+  input.cell.bad{background:var(--red-bg);color:var(--red);font-weight:700;box-shadow:inset 0 0 0 2px var(--red)}
+  .empty-tip{padding:26px;text-align:center;color:var(--ink2)}
+
+  .stats{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);
+    border-top:1px solid var(--line);padding:9px 14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+    backdrop-filter:blur(4px);z-index:5}
+  .stat{font-size:13.5px;color:var(--ink2)}
+  .stat b{color:var(--ink);font-size:16px;font-variant-numeric:tabular-nums}
+  .msg{border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:14px;display:none}
+  .msg.show{display:block}
+  .msg.ok{background:#e8f4ee;color:#12694a;border:1px solid #cbe6d9}
+  .msg.bad{background:var(--red-bg);color:#a92f27;border:1px solid #f6d2cf}
+  .msg ul{margin:6px 0 0;padding-left:20px}
+  @media (max-width:760px){
+    .grid2{grid-template-columns:1fr}
+    body{padding:12px 10px 96px}
+    .stats{gap:10px}
+    .stat b{font-size:15px}
+  }
+  @media print{.stats,.bar,.card,.no-print{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>逐题得分录入</h1>
+  <p class="sub">填每道题谁得了多少分，一键导出 CSV，讲评清单和难点预判就能真跑起来了。</p>
+
+  <div class="bar no-print">
+    <input type="text" id="exam" placeholder="这次考试叫什么？例如 10月月考" style="max-width:260px">
+    <button type="button" class="btn primary" id="btnExport">导出 CSV</button>
+    <button type="button" class="btn" id="btnSave">保存草稿</button>
+    <button type="button" class="btn" id="btnLoad">载入草稿</button>
+    <span class="grow"></span>
+    <span class="hint">键盘优先：Tab 往右一格，回车往下一行，Shift+回车往上一行</span>
+  </div>
+
+  <div class="note">
+    <b>空格子 ≠ 0 分。</b>格子空着 = 这个学生这题<b>没做</b>（导出时不会有这一行）；
+    填了 0 = 他<b>做了但得了 0 分</b>（会导出 0）。两者在数据里是两回事，别拿 0 当空。
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="grid2 no-print">
+    <div class="card">
+      <h3>一、学生名单 <span class="more" id="stuCount"></span></h3>
+      <textarea id="stuBox" placeholder="一行一个名字，例如：&#10;张三&#10;李四&#10;王五"></textarea>
+      <div class="bar" style="margin:10px 0 0">
+        <button type="button" class="btn small" id="btnApplyStu">用这份名单</button>
+        <button type="button" class="btn small" id="btnImportStu">从成绩表 Excel 带出来</button>
+        <span class="grow"></span>
+        <span class="hint">从 Excel 带出来的话，读的是「姓名」那一列</span>
+      </div>
+      <input type="file" id="fileStu" accept=".xlsx" hidden>
+    </div>
+
+    <div class="card">
+      <h3>二、这次考哪些题 <span class="more" id="pickCount"></span></h3>
+      <div class="bar" style="margin:0 0 8px">
+        <input type="text" id="qFilter" placeholder="按题号或知识点筛，例如 绝对值" style="max-width:220px">
+        <button type="button" class="btn small" id="btnAllQ">全选</button>
+        <button type="button" class="btn small" id="btnNoQ">清空</button>
+        <button type="button" class="btn small" id="btnStemQ">只选有题干的</button>
+      </div>
+      <div class="qlist" id="qlist"><div class="hint">正在读题库…</div></div>
+    </div>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty-tip" id="emptyTip">先把左边的名单和题目选好，这里就会出现可以连打的表格。</div>
+  </div>
+</div>
+
+<div class="stats no-print">
+  <span class="stat">已填 <b id="sFilled">0</b> 格</span>
+  <span class="stat">空着 <b id="sBlank">0</b> 格</span>
+  <span class="stat">已填人数 <b id="sStu">0</b></span>
+  <span class="stat">已填题数 <b id="sNo">0</b></span>
+  <span class="stat">当前题平均分 <b id="sAvg">—</b></span>
+  <span class="grow"></span>
+  <span class="hint" id="sBad"></span>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var J = window.JSON;
+  var QB = [];           // 题库
+  var QB_BY_NO = {};     // 题号 -> 题目
+  var students = [];     // 学生名单
+  var picked = [];       // 选中的题号，顺序就是列序
+  var vals = {};         // "学生\u0000题号" -> 输入框里的字符串
+  var curCol = 0;        // 当前焦点在第几列（用于"当前题平均分"）
+
+  function $(id) { return document.getElementById(id); }
+  function key(s, n) { return s + "\u0000" + n; }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function say(kind, title, list) {
+    var box = $("msg");
+    box.className = "msg show " + kind;
+    var html = esc(title);
+    if (list && list.length) {
+      html += "<ul>";
+      for (var i = 0; i < list.length; i++) { html += "<li>" + esc(list[i]) + "</li>"; }
+      html += "</ul>";
+    }
+    box.innerHTML = html;
+    window.scrollTo(0, 0);
+  }
+  function clearSay() { $("msg").className = "msg"; $("msg").innerHTML = ""; }
+
+  function fullOf(no) {
+    var q = QB_BY_NO[no];
+    return q ? Number(q.full) : 0;
+  }
+  function kpOf(no) {
+    var q = QB_BY_NO[no];
+    return q ? (q.kp || "") : "";
+  }
+
+  /* ---------------- 题库 ---------------- */
+  function loadQB() {
+    return fetch("/api/qb").then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || j.ok === false) { throw new Error((j && j.error) || "题库读不出来"); }
+      QB = j.items || [];
+      QB_BY_NO = {};
+      for (var i = 0; i < QB.length; i++) { QB_BY_NO[String(QB[i].no)] = QB[i]; }
+      renderQList();
+    }).catch(function (e) {
+      $("qlist").innerHTML = '<div class="hint">题库读不出来：' + esc(e.message || e) + "</div>";
+    });
+  }
+
+  function renderQList() {
+    var kw = ($("qFilter").value || "").trim();
+    var html = "", shown = 0;
+    for (var i = 0; i < QB.length; i++) {
+      var q = QB[i], no = String(q.no);
+      if (kw && no.indexOf(kw) < 0 && String(q.kp || "").indexOf(kw) < 0) { continue; }
+      shown++;
+      var on = picked.indexOf(no) >= 0;
+      var stem = String(q.stem || "").trim();
+      html += '<label class="qrow"><input type="checkbox" data-no="' + esc(no) + '"' + (on ? " checked" : "") + ">" +
+        '<span class="qno">' + esc(no) + "</span>" +
+        '<span class="qkp">' + esc(q.kp || "") + (stem ? "" : ' <span class="hint">（还没录题干）</span>') + "</span>" +
+        '<span class="qmeta">' + esc(q.full) + "分</span></label>";
+    }
+    $("qlist").innerHTML = shown ? html : '<div class="hint">没有匹配的题号。</div>';
+    $("pickCount").textContent = "（已选 " + picked.length + " 题）";
+  }
+
+  /* ---------------- 学生名单 ---------------- */
+  function applyStudents(list) {
+    students = list.filter(function (x) { return String(x).trim() !== ""; })
+                   .map(function (x) { return String(x).trim(); });
+    var seen = {}, uniq = [];
+    for (var i = 0; i < students.length; i++) {
+      if (!seen[students[i]]) { seen[students[i]] = 1; uniq.push(students[i]); }
+    }
+    students = uniq;
+    $("stuCount").textContent = "（" + students.length + " 人）";
+    renderTable();
+  }
+
+  /* ---------------- 表格 ---------------- */
+  function renderTable() {
+    var thead = $("thead"), tbody = $("tbody");
+    if (!students.length || !picked.length) {
+      thead.innerHTML = ""; tbody.innerHTML = "";
+      $("emptyTip").style.display = "block";
+      $("emptyTip").textContent = !students.length
+        ? "先把学生名单填上（左边一、），表格才有行。"
+        : "再左边二选几道这次考的题，表格才有列。";
+      updateStats();
+      return;
+    }
+    $("emptyTip").style.display = "none";
+
+    var h = "<tr><th style='position:sticky;left:0;z-index:3;background:#f7f9fc'>学生</th>";
+    for (var c = 0; c < picked.length; c++) {
+      h += "<th><span class='qn'>" + esc(picked[c]) + "</span>" +
+           "<span class='qf'>" + esc(fullOf(picked[c])) + "分</span></th>";
+    }
+    thead.innerHTML = h + "</tr>";
+
+    var b = "";
+    for (var r = 0; r < students.length; r++) {
+      b += "<tr><th><span class='idx'>" + (r + 1) + "</span>" + esc(students[r]) + "</th>";
+      for (var c2 = 0; c2 < picked.length; c2++) {
+        var k = key(students[r], picked[c2]);
+        var v = vals[k] === undefined ? "" : vals[k];
+        b += "<td><input class='cell" + (v !== "" ? " filled" : "") + "' type='text' inputmode='decimal' " +
+             "data-r='" + r + "' data-c='" + c2 + "' value='" + esc(v) + "'></td>";
+      }
+      b += "</tr>";
+    }
+    tbody.innerHTML = b;
+    updateStats();
+  }
+
+  function cellAt(r, c) {
+    return document.querySelector("input.cell[data-r='" + r + "'][data-c='" + c + "']");
+  }
+
+  function isBad(r, c) {
+    var k = key(students[r], picked[c]);
+    var v = vals[k];
+    if (v === undefined || v === "") { return false; }
+    var n = Number(v);
+    if (!isFinite(n)) { return true; }
+    return n < 0 || n > fullOf(picked[c]) + 1e-9;
+  }
+
+  function markCell(input, r, c) {
+    var bad = isBad(r, c);
+    input.className = "cell" + (bad ? " bad" : (input.value.trim() ? " filled" : ""));
+  }
+
+  function updateStats() {
+    var filled = 0, blank = 0, bad = 0;
+    for (var r = 0; r < students.length; r++) {
+      for (var c = 0; c < picked.length; c++) {
+        var v = vals[key(students[r], picked[c])];
+        if (v === undefined || String(v).trim() === "") { blank++; } else { filled++; }
+        if (isBad(r, c)) { bad++; }
+      }
+    }
+    var stuSet = {}, noSet = {};
+    for (var r2 = 0; r2 < students.length; r2++) {
+      for (var c2 = 0; c2 < picked.length; c2++) {
+        var v2 = vals[key(students[r2], picked[c2])];
+        if (v2 !== undefined && String(v2).trim() !== "") {
+          stuSet[students[r2]] = 1; noSet[picked[c2]] = 1;
+        }
+      }
+    }
+    $("sFilled").textContent = filled;
+    $("sBlank").textContent = blank;
+    $("sStu").textContent = Object.keys(stuSet).length;
+    $("sNo").textContent = Object.keys(noSet).length;
+
+    var sum = 0, cnt = 0, col = picked[curCol];
+    if (col !== undefined) {
+      for (var r3 = 0; r3 < students.length; r3++) {
+        var v3 = vals[key(students[r3], col)];
+        if (v3 !== undefined && String(v3).trim() !== "") {
+          var n3 = Number(v3);
+          if (isFinite(n3)) { sum += n3; cnt++; }
+        }
+      }
+    }
+    $("sAvg").textContent = cnt ? (Math.round(sum / cnt * 100) / 100) +
+      "（第 " + (curCol + 1) + " 列 " + (col || "") + " 题，" + cnt + " 人）" : "—";
+    $("sBad").textContent = bad ? ("有 " + bad + " 格超范围，先改掉才能导出") : "";
+    $("sBad").style.color = bad ? "#d9483f" : "";
+  }
+
+  /* ---------------- 键盘 ---------------- */
+  document.addEventListener("keydown", function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains("cell")) { return; }
+    var r = parseInt(t.getAttribute("data-r"), 10);
+    var c = parseInt(t.getAttribute("data-c"), 10);
+    if (e.key === "Enter") {
+      e.preventDefault();
+      var nr = e.shiftKey ? r - 1 : r + 1;
+      var next = cellAt(nr, c);
+      if (next) { next.focus(); next.select(); }
+    }
+  });
+
+  document.addEventListener("focusin", function (e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains("cell")) {
+      curCol = parseInt(t.getAttribute("data-c"), 10) || 0;
+      t.select();
+      updateStats();
+    }
+  });
+
+  document.addEventListener("input", function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains("cell")) { return; }
+    var r = parseInt(t.getAttribute("data-r"), 10);
+    var c = parseInt(t.getAttribute("data-c"), 10);
+    vals[key(students[r], picked[c])] = t.value;
+    markCell(t, r, c);
+    updateStats();
+  });
+
+  /* ---------------- 导出 ---------------- */
+  function collectRows() {
+    var rows = [];
+    for (var r = 0; r < students.length; r++) {
+      for (var c = 0; c < picked.length; c++) {
+        var v = vals[key(students[r], picked[c])];
+        if (v === undefined || String(v).trim() === "") { continue; }   // 空格子 = 没做，不导出
+        rows.push({ student: students[r], no: picked[c], kp: kpOf(picked[c]),
+                    full: fullOf(picked[c]), score: String(v).trim() });
+      }
+    }
+    return rows;
+  }
+
+  function doExport() {
+    clearSay();
+    var exam = ($("exam").value || "").trim();
+    if (!exam) { say("bad", "先给这次考试起个名字（例如 10月月考），导出的文件名要用它。"); $("exam").focus(); return; }
+    if (!students.length || !picked.length) { say("bad", "名单或题目还没选，没有可以导出的表格。"); return; }
+
+    var bad = [];
+    for (var r = 0; r < students.length; r++) {
+      for (var c = 0; c < picked.length; c++) {
+        if (isBad(r, c)) {
+          bad.push("第 " + (r + 1) + " 行「" + students[r] + "」第 " + (c + 1) +
+                   " 列（第 " + picked[c] + " 题）得了 " + vals[key(students[r], picked[c])] +
+                   "，满分只有 " + fullOf(picked[c]));
+        }
+      }
+    }
+    if (bad.length) {
+      say("bad", "有 " + bad.length + " 格超出了满分范围，先改掉再导出：", bad.slice(0, 8));
+      return;
+    }
+
+    var rows = collectRows();
+    if (!rows.length) { say("bad", "一个格子都还没填。空格子不算分，至少要填一格。"); return; }
+    var payload = { exam: exam, students: students, nos: picked, rows: rows };
+
+    fetch("/api/scores/export", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: J.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) {
+        return r.json().then(function (j) {
+          var list = [];
+          var es = (j && j.errors) || [];
+          for (var i = 0; i < es.length; i++) { list.push(es[i].where + "：" + es[i].message); }
+          throw { message: (j && j.error) || "导出失败", list: list };
+        });
+      }
+      var cd = r.headers.get("Content-Disposition") || "";
+      var name = "逐题得分.csv";
+      var m = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      if (m) { try { name = decodeURIComponent(m[1]); } catch (x) { name = "逐题得分.csv"; } }
+      return r.blob().then(function (b) {
+        var url = URL.createObjectURL(b);
+        var a = document.createElement("a");
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+        say("ok", "已导出 " + rows.length + " 条得分（" + students.length + " 人 × " + picked.length +
+            " 题的已填部分），文件名：" + name + "。空格子没有导出——那就是「这题没做」。");
+      });
+    }).catch(function (e) {
+      if (e && e.list) { say("bad", e.message, e.list); }
+      else { say("bad", "导出没成功：" + ((e && e.message) || e)); }
+    });
+  }
+
+  /* ---------------- 草稿 ---------------- */
+  function draftPayload() {
+    return { exam: ($("exam").value || "").trim(), students: students, nos: picked, rows: collectRows() };
+  }
+
+  function doSave() {
+    clearSay();
+    var p = draftPayload();
+    if (!p.exam) { say("bad", "先填考试名，草稿按考试名存。"); $("exam").focus(); return; }
+    fetch("/api/scores/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: J.stringify(p) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { say("bad", (res.j && res.j.error) || "存草稿失败。"); return; }
+        say("ok", "草稿已存好（" + res.j.cells + " 格，" + res.j.saved_at + "）。刷新页面不会丢了。");
+      })
+      .catch(function (e) { say("bad", "存草稿失败：" + ((e && e.message) || e)); });
+  }
+
+  function doLoad() {
+    clearSay();
+    var exam = ($("exam").value || "").trim();
+    if (!exam) { say("bad", "先填考试名，才知道要载入哪一份草稿。"); $("exam").focus(); return; }
+    fetch("/api/scores/" + encodeURIComponent(exam))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { say("bad", (res.j && res.j.error) || "没有找到这份草稿。"); return; }
+        var j = res.j;
+        picked = (j.nos || []).map(String);
+        vals = {};
+        var rows = j.rows || [];
+        for (var i = 0; i < rows.length; i++) {
+          vals[key(String(rows[i].student), String(rows[i].no))] = String(rows[i].score);
+        }
+        $("stuBox").value = (j.students || []).join("\n");
+        applyStudents(j.students || []);
+        renderQList();
+        renderTable();
+        say("ok", "已载入「" + exam + "」的草稿（" + rows.length + " 格，" + j.saved_at + "）。");
+      })
+      .catch(function (e) { say("bad", "载入失败：" + ((e && e.message) || e)); });
+  }
+
+  /* ---------------- 绑定 ---------------- */
+  $("exam").addEventListener("input", function () { curCol = 0; });
+
+  $("qFilter").addEventListener("input", renderQList);
+  $("qlist").addEventListener("change", function (e) {
+    var t = e.target;
+    if (!t || t.type !== "checkbox") { return; }
+    var no = t.getAttribute("data-no");
+    var i = picked.indexOf(no);
+    if (t.checked && i < 0) { picked.push(no); }
+    if (!t.checked && i >= 0) { picked.splice(i, 1); }
+    $("pickCount").textContent = "（已选 " + picked.length + " 题）";
+    renderTable();
+  });
+  $("btnAllQ").onclick = function () {
+    picked = [];
+    for (var i = 0; i < QB.length; i++) { picked.push(String(QB[i].no)); }
+    renderQList(); renderTable();
+  };
+  $("btnNoQ").onclick = function () { picked = []; renderQList(); renderTable(); };
+  $("btnStemQ").onclick = function () {
+    picked = [];
+    for (var i = 0; i < QB.length; i++) {
+      if (String(QB[i].stem || "").trim()) { picked.push(String(QB[i].no)); }
+    }
+    renderQList(); renderTable();
+  };
+
+  $("btnApplyStu").onclick = function () {
+    applyStudents($("stuBox").value.split("\n"));
+    clearSay();
+  };
+  $("btnImportStu").onclick = function () { $("fileStu").value = ""; $("fileStu").click(); };
+  $("fileStu").onchange = function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) { return; }
+    var fd = new FormData();
+    fd.append("file", f, f.name);
+    fetch("/api/scores/students", { method: "POST", body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { say("bad", (res.j && res.j.error) || "这个表格读不进来。"); return; }
+        $("stuBox").value = res.j.students.join("\n");
+        applyStudents(res.j.students);
+        say("ok", "从表格里带出来 " + res.j.count + " 个学生。");
+      })
+      .catch(function (e) { say("bad", "读表格失败：" + ((e && e.message) || e)); });
+  };
+
+  $("btnExport").onclick = doExport;
+  $("btnSave").onclick = doSave;
+  $("btnLoad").onclick = doLoad;
+
+  loadQB();
+})();
+</script>
+</body>
+</html>

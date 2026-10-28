@@ -1,0 +1,709 @@
+{
+  "meta": {
+    "version": 1,
+    "book": "示例 · 有理数（七年级上册）",
+    "note": "这是题库录入器的数据文件。no 唯一；stem 为空表示题面还没录，页面会显示占位。改这个文件不用动代码。",
+    "fields": "no 题号 | chapter 章节 | kp 知识点 | full 满分 | difficulty easy/mid/hard | err 错因倾向 | stem 题干 | answer 答案 | options 选项(可空)",
+    "updated": "2026-10-29"
+  },
+  "items": [
+    {
+      "no": "1",
+      "chapter": "1.2",
+      "kp": "相反数",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "-(-5) 的值是（　）",
+      "answer": "5",
+      "options": [
+        "A. -5",
+        "B. 5",
+        "C. 0",
+        "D. 无法确定"
+      ]
+    },
+    {
+      "no": "2",
+      "chapter": "1.1",
+      "kp": "正负数概念",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "下列各数中，是负数的是（　）",
+      "answer": "B",
+      "options": [
+        "A. 0",
+        "B. -3.5",
+        "C. 2",
+        "D. |-2|"
+      ]
+    },
+    {
+      "no": "3",
+      "chapter": "1.5",
+      "kp": "近似数",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "审题错误",
+      "stem": "3.14159 精确到千分位是（　）",
+      "answer": "3.142",
+      "options": [
+        "A. 3.14",
+        "B. 3.141",
+        "C. 3.142",
+        "D. 3.1416"
+      ]
+    },
+    {
+      "no": "4",
+      "chapter": "1.5",
+      "kp": "科学记数法",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "把 360000 用科学记数法表示是（　）",
+      "answer": "3.6×10^5",
+      "options": [
+        "A. 36×10^4",
+        "B. 3.6×10^5",
+        "C. 3.6×10^6",
+        "D. 0.36×10^6"
+      ]
+    },
+    {
+      "no": "5",
+      "chapter": "1.2",
+      "kp": "数轴",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "在数轴上，表示 -2 的点在原点的（　）",
+      "answer": "左边 2 个单位",
+      "options": [
+        "A. 右边 2 个单位",
+        "B. 左边 2 个单位",
+        "C. 左边 1 个单位",
+        "D. 原地"
+      ]
+    },
+    {
+      "no": "6",
+      "chapter": "1.3",
+      "kp": "有理数加法",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "计算错误",
+      "stem": "计算：(-7) + 3 = ______",
+      "answer": "-4"
+    },
+    {
+      "no": "7",
+      "chapter": "1.4",
+      "kp": "倒数",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "-1/3 的倒数是（　）",
+      "answer": "-3",
+      "options": [
+        "A. 1/3",
+        "B. -3",
+        "C. 3",
+        "D. -1/3"
+      ]
+    },
+    {
+      "no": "8",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "若 |x| = 6，则 x 的值是（　）",
+      "answer": "x = 6 或 x = -6",
+      "options": [
+        "A. 6",
+        "B. -6",
+        "C. 6 或 -6",
+        "D. 0"
+      ]
+    },
+    {
+      "no": "9",
+      "chapter": "1.3",
+      "kp": "有理数减法",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "计算错误",
+      "stem": "计算：3 - (-5) = ______",
+      "answer": "8"
+    },
+    {
+      "no": "10",
+      "chapter": "1.2",
+      "kp": "有理数的大小比较",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "审题错误",
+      "stem": "比较大小：-3 ____ -5（填“>”“<”或“=”）",
+      "answer": ">"
+    },
+    {
+      "no": "11",
+      "chapter": "1.4",
+      "kp": "有理数乘除",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "计算错误",
+      "stem": "计算：(-3) × (-4) = ______",
+      "answer": "12"
+    },
+    {
+      "no": "12",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "步骤遗漏",
+      "stem": "计算：| -7 | - | 3 | = ______",
+      "answer": "4"
+    },
+    {
+      "no": "13",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "若 |x| = 6 且 x 是正数，则 x = ______",
+      "answer": "6"
+    },
+    {
+      "no": "14",
+      "chapter": "1.1",
+      "kp": "有理数的实际应用",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "审题错误",
+      "stem": "某地早晨气温 -5℃，中午比早晨上升了 8℃，中午气温是（　）",
+      "answer": "3℃",
+      "options": [
+        "A. -13℃",
+        "B. 3℃",
+        "C. 13℃",
+        "D. -3℃"
+      ]
+    },
+    {
+      "no": "15",
+      "chapter": "1.5",
+      "kp": "有理数乘方",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "计算错误",
+      "stem": "计算：(-2)³ = ______",
+      "answer": "-8"
+    },
+    {
+      "no": "16",
+      "chapter": "1.5",
+      "kp": "有理数的概念与分类",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "审题错误",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "17",
+      "chapter": "1.2",
+      "kp": "有理数的概念与分类",
+      "full": 12,
+      "difficulty": "mid",
+      "err": "步骤遗漏",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "18",
+      "chapter": "1.2",
+      "kp": "数轴",
+      "full": 8,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "19",
+      "chapter": "1.5",
+      "kp": "有理数混合运算",
+      "full": 4,
+      "difficulty": "mid",
+      "err": "计算错误",
+      "stem": "计算：(-2)³ ÷ 4 - (-3) × 2（写出过程）",
+      "answer": "4"
+    },
+    {
+      "no": "20",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 8,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "21",
+      "chapter": "1.1",
+      "kp": "有理数的实际应用",
+      "full": 10,
+      "difficulty": "hard",
+      "err": "计算错误",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "22",
+      "chapter": "1.5",
+      "kp": "有理数混合运算",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "23",
+      "chapter": "1.5",
+      "kp": "有理数乘方",
+      "full": 12,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "",
+      "answer": ""
+    },
+    {
+      "no": "101",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "计算：| -5 | = ______",
+      "answer": "5",
+      "options": []
+    },
+    {
+      "no": "102",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "绝对值等于 7 的正数是 ______",
+      "answer": "7",
+      "options": []
+    },
+    {
+      "no": "103",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 8,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "若 |x - 2| = 3，则 x = ______（写出所有可能）",
+      "answer": "x = 5 或 x = -1",
+      "options": []
+    },
+    {
+      "no": "104",
+      "chapter": "1.2",
+      "kp": "绝对值",
+      "full": 8,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "计算：| -3 | + | 2 - 7 | = ______（写出过程）",
+      "answer": "8",
+      "options": []
+    },
+    {
+      "no": "105",
+      "chapter": "1.5",
+      "kp": "有理数乘方",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "计算错误",
+      "stem": "计算：2³ = ______",
+      "answer": "8",
+      "options": []
+    },
+    {
+      "no": "106",
+      "chapter": "1.5",
+      "kp": "有理数乘方",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "计算：(-1)²⁰²⁵ = ______",
+      "answer": "-1",
+      "options": []
+    },
+    {
+      "no": "107",
+      "chapter": "1.3",
+      "kp": "有理数加法",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "计算错误",
+      "stem": "计算：5 + (-9) = ______",
+      "answer": "-4",
+      "options": []
+    },
+    {
+      "no": "108",
+      "chapter": "1.3",
+      "kp": "有理数加法",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "计算：(-3.5) + 2.5 + (-1) = ______（写出过程）",
+      "answer": "-2",
+      "options": []
+    },
+    {
+      "no": "109",
+      "chapter": "1.3",
+      "kp": "有理数减法",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "计算错误",
+      "stem": "计算：7 - 12 = ______",
+      "answer": "-5",
+      "options": []
+    },
+    {
+      "no": "110",
+      "chapter": "1.3",
+      "kp": "有理数减法",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "计算：(-4) - (-9) = ______，并说明减法法则",
+      "answer": "5",
+      "options": []
+    },
+    {
+      "no": "201",
+      "chapter": "1.2",
+      "kp": "有理数的概念与分类",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "下列各数中，是整数的是（　）",
+      "answer": "B",
+      "options": [
+        "A. 1/2",
+        "B. -3",
+        "C. 0.5",
+        "D. 3.14"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "202",
+      "chapter": "1.2",
+      "kp": "有理数的概念与分类",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "-3.5 属于（　）",
+      "answer": "B",
+      "options": [
+        "A. 正整数",
+        "B. 负分数",
+        "C. 正分数",
+        "D. 无理数"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "203",
+      "chapter": "1.2",
+      "kp": "有理数的概念与分类",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "审题错误",
+      "stem": "在 -7、0、3.14、-2/3、+8 这五个数中，整数共有（　）个",
+      "answer": "B",
+      "options": [
+        "A. 2",
+        "B. 3",
+        "C. 4",
+        "D. 5"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "204",
+      "chapter": "1.2",
+      "kp": "数轴",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "数轴上到原点距离等于 4 的点表示的数是（　）",
+      "answer": "C",
+      "options": [
+        "A. 4",
+        "B. -4",
+        "C. 4 或 -4",
+        "D. 0"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "205",
+      "chapter": "1.2",
+      "kp": "数轴",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "数轴上点 A 表示 -2，点 B 表示 3，则 A、B 两点间的距离是（　）",
+      "answer": "C",
+      "options": [
+        "A. 1",
+        "B. 3",
+        "C. 5",
+        "D. 6"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "206",
+      "chapter": "1.2",
+      "kp": "相反数",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "若 a 与 -7 互为相反数，则 a =（　）",
+      "answer": "B",
+      "options": [
+        "A. -7",
+        "B. 7",
+        "C. 0",
+        "D. 1/7"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "207",
+      "chapter": "1.2",
+      "kp": "相反数",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "若 x 与 y 互为相反数，且 x - y = 6，则 x =（　）",
+      "answer": "A",
+      "options": [
+        "A. 3",
+        "B. -3",
+        "C. 6",
+        "D. -6"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "208",
+      "chapter": "1.4",
+      "kp": "倒数",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "概念不清",
+      "stem": "若 a 的倒数是 -2，则 a =（　）",
+      "answer": "D",
+      "options": [
+        "A. 2",
+        "B. -2",
+        "C. 1/2",
+        "D. -1/2"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "209",
+      "chapter": "1.4",
+      "kp": "倒数",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "审题错误",
+      "stem": "倒数等于它本身的数是（　）",
+      "answer": "C",
+      "options": [
+        "A. 1",
+        "B. -1",
+        "C. 1 和 -1",
+        "D. 0 和 1"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "210",
+      "chapter": "1.2",
+      "kp": "有理数的大小比较",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "比较大小：-3 ______ -5（填“>”“<”或“=”）",
+      "answer": ">",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "211",
+      "chapter": "1.2",
+      "kp": "有理数的大小比较",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "审题错误",
+      "stem": "若 a<0，b>0，且 |a|>|b|，则 a、b、-a、-b 从小到大排列是（　）",
+      "answer": "A",
+      "options": [
+        "A. a < -b < b < -a",
+        "B. -a < b < -b < a",
+        "C. a < b < -b < -a",
+        "D. -b < a < b < -a"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "212",
+      "chapter": "1.4",
+      "kp": "有理数乘除",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "计算错误",
+      "stem": "计算：(-2) × 5 = ______",
+      "answer": "-10",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "213",
+      "chapter": "1.4",
+      "kp": "有理数乘除",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "若 ab < 0，且 a > 0，则 b（　）0",
+      "answer": "B",
+      "options": [
+        "A. >",
+        "B. <",
+        "C. =",
+        "D. 无法确定"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "214",
+      "chapter": "1.5",
+      "kp": "有理数混合运算",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "计算错误",
+      "stem": "计算：-5 + 3 × 2 = ______",
+      "answer": "1",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "215",
+      "chapter": "1.5",
+      "kp": "有理数混合运算",
+      "full": 6,
+      "difficulty": "hard",
+      "err": "步骤遗漏",
+      "stem": "计算：-1² + (-2)² - | -3 | = ______（写出过程）",
+      "answer": "0",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "216",
+      "chapter": "1.5",
+      "kp": "科学记数法与近似数",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "概念不清",
+      "stem": "把 0.00036 用科学记数法表示是 ______",
+      "answer": "3.6×10^-4",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "217",
+      "chapter": "1.5",
+      "kp": "科学记数法与近似数",
+      "full": 3,
+      "difficulty": "mid",
+      "err": "审题错误",
+      "stem": "近似数 2.30×10^4 精确到（　）位",
+      "answer": "A",
+      "options": [
+        "A. 百",
+        "B. 十",
+        "C. 个",
+        "D. 千"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "218",
+      "chapter": "1.5",
+      "kp": "科学记数法与近似数",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "审题错误",
+      "stem": "把 123456 用四舍五入法精确到万位，结果是 ______",
+      "answer": "1.2×10^5",
+      "options": [],
+      "source": "自编"
+    },
+    {
+      "no": "219",
+      "chapter": "1.1",
+      "kp": "有理数的实际应用",
+      "full": 3,
+      "difficulty": "easy",
+      "err": "审题错误",
+      "stem": "某地某天最高气温 6℃，最低气温 -4℃，这天的温差是（　）",
+      "answer": "C",
+      "options": [
+        "A. 2℃",
+        "B. 6℃",
+        "C. 10℃",
+        "D. -10℃"
+      ],
+      "source": "自编"
+    },
+    {
+      "no": "220",
+      "chapter": "1.1",
+      "kp": "有理数的实际应用",
+      "full": 3,
+      "difficulty": "hard",
+      "err": "概念不清",
+      "stem": "电梯从地下 2 层（记作 -2 层）上升到地面以上 5 层（记作 5 层），共上升了（　）层",
+      "answer": "C",
+      "options": [
+        "A. 3",
+        "B. 5",
+        "C. 7",
+        "D. 9"
+      ],
+      "source": "自编"
+    }
+  ]
+}

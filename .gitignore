@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+输出/
+_scores/
+_abtest/
+_jobs/
+_tmp/
+*.db
+*.db-journal
+*.bak
+*.bak.*
+config.json
+.env
+.DS_Store
+Thumbs.db

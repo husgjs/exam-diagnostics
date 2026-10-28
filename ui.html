@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>教师工作台 · 成绩分析</title>
+<style>
+:root{
+  --ink:#1d2733; --ink2:#5a6b7b; --mute:#8494a5; --line:#dfe5ec; --bg:#f4f6f9;
+  --main:#2563eb; --main-d:#1d4ed8; --ok:#0f9d58; --err:#c0392b; --r:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-size:15px; line-height:1.65;
+  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+h1,h2,h3{margin:0}
+
+/* ---------- 顶栏 ---------- */
+.bar{background:#fff;border-bottom:1px solid var(--line)}
+.bar-in{max-width:960px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:34px;height:34px;border-radius:9px;background:var(--main);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.brand-txt h1{font-size:17px;line-height:1.25}
+.brand-txt p{margin:2px 0 0;font-size:12.5px;color:var(--ink2)}
+.ok-badge{font-size:12px;color:#0b6b3a;background:#e6f6ee;border:1px solid #bfe7d4;border-radius:999px;padding:5px 11px;white-space:nowrap}
+
+/* ---------- 版面 ---------- */
+.wrap{max-width:960px;margin:0 auto;padding:22px 20px 56px}
+.view{display:none}
+.view.is-active{display:block}
+.view h2{font-size:20px;margin:0 0 6px}
+.foot{max-width:960px;margin:0 auto;padding:0 20px 40px;font-size:12px;color:#9aa8b8;text-align:center}
+
+/* ---------- ① 上传页 ---------- */
+.drop{margin-top:10px;background:#fff;border:2px dashed #b9c6d6;border-radius:16px;padding:44px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop:focus{border-color:var(--main);background:#f7faff;outline:none}
+.drop.over{border-color:var(--main);background:#eef4ff}
+.drop-icon{width:54px;height:54px;margin:0 auto 14px;border-radius:14px;border:2px solid #cfdaea;position:relative}
+.drop-icon::before{content:"";position:absolute;left:50%;top:15px;width:2px;height:16px;background:#9fb1c7;transform:translateX(-1px)}
+.drop-icon::after{content:"";position:absolute;left:50%;top:15px;width:11px;height:11px;border-left:2px solid #9fb1c7;border-top:2px solid #9fb1c7;transform:translate(-50%,0) rotate(45deg)}
+.drop-main{font-size:19px;font-weight:600;margin:0}
+.drop-alt{margin:8px 0 0;color:var(--ink2);font-size:14px}
+.fake-link{color:var(--main);text-decoration:underline}
+.drop-hint{margin:12px 0 0;font-size:12.5px;color:var(--mute)}
+.privacy{margin:16px 0 0;font-size:13.5px;color:#0b6b3a;background:#e9f7f0;border:1px solid #c9e9d8;border-radius:10px;padding:10px 14px;display:flex;gap:9px;align-items:flex-start}
+.lock{width:13px;height:10px;border:2px solid #0b6b3a;border-radius:2px;position:relative;flex:0 0 auto;margin-top:5px}
+.lock::before{content:"";position:absolute;left:1px;top:-8px;width:7px;height:7px;border:2px solid #0b6b3a;border-bottom:none;border-radius:4px 4px 0 0}
+.tips{margin:20px 0 0;padding:0;list-style:none;display:grid;gap:9px}
+.tips li{position:relative;padding-left:22px;font-size:13.5px;color:var(--ink2)}
+.tips li::before{content:"";position:absolute;left:4px;top:10px;width:6px;height:6px;border-radius:50%;background:#c3cfdd}
+.tips strong{color:var(--ink)}
+
+/* ---------- ② 运行中 ---------- */
+.file-chip{font-weight:400;font-size:13.5px;color:var(--ink2);background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px;margin-left:6px;word-break:break-all;display:inline-block;vertical-align:2px}
+.bar-track{margin-top:18px;height:12px;background:#e3e9f1;border-radius:999px;overflow:hidden}
+.bar-fill{height:100%;width:0;background:linear-gradient(90deg,#60a5fa,#2563eb);border-radius:999px;transition:width .35s ease}
+.progress-text{margin:11px 0 0;font-size:15px}
+.progress-meta{margin:2px 0 0;font-size:12.5px;color:var(--mute)}
+.steps{list-style:none;margin:22px 0 0;padding:0}
+.step{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed #e5eaf1;font-size:14px}
+.step:last-child{border-bottom:0}
+.step-mark{width:20px;height:20px;border-radius:50%;border:1.5px solid #cbd6e2;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;line-height:1}
+.step-done .step-mark{background:var(--ok);border-color:var(--ok)}
+.step-running .step-mark{border-color:var(--main);border-right-color:transparent;animation:spin .9s linear infinite}
+.step-failed .step-mark{background:var(--err);border-color:var(--err)}
+.step-running .step-name{color:var(--main);font-weight:600}
+.step-pending .step-name{color:var(--mute)}
+.step-ms{margin-left:auto;font-size:12px;color:var(--mute);flex:0 0 auto}
+.run-hint{margin:16px 0 0;font-size:12.5px;color:var(--mute)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- ③ 结果页 ---------- */
+.res-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.res-sub{margin:0;font-size:13px;color:var(--ink2)}
+.cards{margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:0 1px 2px rgba(16,34,54,.04)}
+.card h3{font-size:14px;color:var(--ink2);font-weight:600;margin:0 0 10px}
+.kpis{display:flex;flex-wrap:wrap;gap:18px}
+.kpi{min-width:96px}
+.kpi-v{font-size:30px;font-weight:700;line-height:1.15;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.kpi-k{font-size:12.5px;color:var(--ink2);margin-top:3px}
+.kpi-h{font-size:11.5px;color:var(--mute);margin-top:4px;max-width:240px;line-height:1.5}
+.card-note{margin:12px 0 0;padding-top:10px;border-top:1px dashed #e5eaf1;font-size:12.5px;color:var(--ink2)}
+.empty{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:18px;font-size:13.5px;color:var(--ink2)}
+.dl{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.dl h3{font-size:14px;margin:0 0 12px}
+.files{list-style:none;margin:0;padding:0}
+.files li{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed #e5eaf1}
+.files li:last-child{border-bottom:0}
+.fs{width:16px;height:20px;border:1.5px solid #b9c6d6;border-radius:3px;flex:0 0 auto;position:relative}
+.fs::after{content:"";position:absolute;right:-2px;top:-2px;width:7px;height:7px;background:#fff;border-left:1.5px solid #b9c6d6;border-bottom:1.5px solid #b9c6d6}
+.files a{color:var(--main);text-decoration:none;font-size:14px;word-break:break-all}
+.files a:hover{text-decoration:underline}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:10px 18px;font-size:14.5px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;line-height:1.2}
+.btn:hover{border-color:#b9c6d6;background:#f7f9fc}
+.btn-main{background:var(--main);border-color:var(--main);color:#fff}
+.btn-main:hover{background:var(--main-d);border-color:var(--main-d);color:#fff}
+.dl-hint{margin:12px 0 0;font-size:12.5px;color:var(--mute)}
+.glossary{margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:2px 18px}
+.glossary summary{cursor:pointer;padding:13px 0;font-size:14px;font-weight:600}
+.glossary dl{margin:0 0 16px;padding:0}
+.glossary dt{font-weight:600;font-size:13.5px;margin-top:11px}
+.glossary dd{margin:2px 0 0;font-size:13px;color:var(--ink2)}
+
+/* ---------- ④ 出错页 ---------- */
+.err-box{background:#fff;border:1px solid #f0cfcb;border-radius:16px;padding:26px 24px;max-width:640px}
+.err-icon{width:40px;height:40px;border-radius:50%;background:#fdecea;color:var(--err);font-weight:700;font-size:22px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.err-box h2{font-size:19px;color:#a02c1e;margin:0}
+.err-msg{margin:9px 0 0;font-size:14px;color:var(--ink);word-break:break-word}
+.err-tips{margin:14px 0 0;padding-left:20px;font-size:13.5px;color:var(--ink2)}
+.err-tips li{margin-bottom:7px}
+.err-foot{margin:14px 0 0;font-size:12.5px;color:var(--mute)}
+
+/* ---------- 手机 ---------- */
+@media (max-width:640px){
+  .bar-in{padding:12px 14px}
+  .brand-txt p{display:none}
+  .wrap{padding:18px 14px 44px}
+  .drop{padding:32px 16px}
+  .drop-main{font-size:17px}
+  .ok-badge{font-size:11px;padding:4px 9px}
+  .view h2{font-size:18px}
+  .dl,.glossary{padding-left:14px;padding-right:14px}
+}
+@media (max-width:480px){
+  .cards{grid-template-columns:1fr}
+  .kpi-v{font-size:26px}
+  .kpis{gap:14px}
+  .actions .btn{flex:1 1 100%}
+  .file-chip{margin-left:0;display:block;margin-top:6px}
+}
+
+/* ---------- 打印 ---------- */
+@media print{
+  body{background:#fff;color:#000;font-size:12pt}
+  .no-print,.foot{display:none!important}
+  .wrap{max-width:none;padding:0}
+  .view{display:none!important}
+  .view.is-active{display:block!important}
+  .bar-track,.progress-text,.progress-meta,.steps,.run-hint,.actions,.dl-hint{display:none!important}
+  .card,.dl,.glossary,.empty{border:1px solid #000;box-shadow:none;background:#fff;break-inside:avoid}
+  .card h3,.kpi-k,.kpi-h,.card-note,.res-sub,.glossary dd,.empty{color:#000}
+  .kpi-v,.view h2,.glossary dt{color:#000}
+  a{color:#000;text-decoration:none}
+  .files a::after{content:"（本机文件：" attr(data-path) "）";font-size:9.5pt;color:#333}
+  .glossary{padding:0 12px}
+}
+</style>
+</head>
+<body>
+<!--
+  教师工作台 · 前端模板（单文件，样式和脚本都写在文件里，不引用任何外部资源，断网可用）
+  由 teacher_app.py 在访问 / 时原样吐出，不做变量替换。
+
+  对接的地址（都是本站的相对路径）：
+    POST /api/upload          表单上传一个 .xlsx，字段名用 file
+                              返回 {"job":"<id>","file":"成绩单.xlsx","kind":"grade|daily|card"}
+    POST /api/run             正文 {"job":"<id>"}，返回 {"job":"<id>","state":"running"}
+    GET  /api/job/<id>        返回 {"state":"running|done|failed","steps":[...],"cards":[...],"files":[...],"error":""}
+    GET  /api/file/<id>/<名称> 下载单个产物
+    GET  /api/zip/<id>        打包下载全部产物
+  进度轮询间隔 800 毫秒；state 变成 done 或 failed 时停止轮询。
+-->
+<header class="bar no-print">
+  <div class="bar-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">分</span>
+      <div class="brand-txt">
+        <h1>教师工作台</h1>
+        <p>把成绩单放进来，自动出学情分析</p>
+      </div>
+    </div>
+    <span class="ok-badge" title="分析全程在这台电脑上跑，表格不会被发到任何地方">本机运行 · 断网也能用</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ① 上传页 -->
+  <section id="view-upload" class="view is-active" aria-labelledby="up-h">
+    <h2 id="up-h">选一份要分析的成绩单</h2>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-labelledby="drop-main" aria-describedby="drop-hint">
+      <div class="drop-icon" aria-hidden="true"></div>
+      <p class="drop-main" id="drop-main">把成绩单拖到这里</p>
+      <p class="drop-alt">或者 <span class="fake-link">点这里选文件</span></p>
+      <p class="drop-hint" id="drop-hint">支持 .xlsx（Excel 另存的表格文件），一次一份</p>
+      <input type="file" id="file" accept=".xlsx" hidden>
+    </div>
+    <p class="privacy"><span class="lock" aria-hidden="true"></span>数据只留在你这台电脑上，不上传任何服务器。</p>
+    <ul class="tips">
+      <li>表格里最好有<strong>学号、姓名、分数</strong>这几列；列名叫「总分」「成绩」「得分」都能认出来。</li>
+      <li>一次分析一份：月考、周测、平时成绩都能用，班多班少都行。</li>
+      <li>分析出来的表格会自动存在这台电脑上，不会自动发给学生或家长。</li>
+    </ul>
+  </section>
+
+  <!-- ② 运行中 -->
+  <section id="view-run" class="view" aria-labelledby="run-h">
+    <h2 id="run-h">正在分析<span id="run-file" class="file-chip"></span></h2>
+    <div class="bar-track"><div id="progress-fill" class="bar-fill"></div></div>
+    <p class="progress-text" id="progress-text" aria-live="polite">正在读表格…</p>
+    <p class="progress-meta" id="progress-meta"></p>
+    <ol class="steps" id="steps"></ol>
+    <p class="run-hint">页面别关、也别刷新，算完会自动跳到结果页。</p>
+  </section>
+
+  <!-- ③ 结果页 -->
+  <section id="view-result" class="view" aria-labelledby="res-h">
+    <div class="res-head">
+      <h2 id="res-h">分析完成</h2>
+      <p class="res-sub" id="res-sub"></p>
+    </div>
+    <div id="cards" class="cards"></div>
+    <div class="dl">
+      <h3>可以下载的文件</h3>
+      <ul id="files" class="files"></ul>
+      <div class="actions no-print">
+        <a id="zip" class="btn btn-main" href="#">打包下载全部</a>
+        <button type="button" id="again" class="btn">再分析一份</button>
+      </div>
+      <p class="dl-hint">文件同时也存在这台电脑的「教师工具 / 输出」文件夹里，随时能再拿。</p>
+    </div>
+    <details class="glossary">
+      <summary>这些词是什么意思？（点开看）</summary>
+      <dl>
+        <dt>平均分</dt>
+        <dd>全班分数的平均数。跟别的班放一起看，才知道这次是普遍考得低，还是只有这个班低。</dd>
+        <dt>得分率</dt>
+        <dd>拿到的分除以满分。比如 74%，就是这一项大家平均拿到了七成半的分。</dd>
+        <dt>难度</dt>
+        <dd>其实就是得分率，数字越大说明越多人做对。0.85 是道送分题，0.25 是道硬骨头。</dd>
+        <dt>区分度</dt>
+        <dd>越高越能分出谁会谁不会；低于 0.15 说明这道题白考（谁做都差不多，拉不开差距，占着题位没起作用）。一般 0.3 以上算好用，0.45 就很好。</dd>
+        <dt>临界生</dt>
+        <dd>总分刚好卡在分数线上下、再使一把劲就能上线的学生，一般是离上线差 10 分以内的那一批，也是课后最值得优先盯的几个人。</dd>
+        <dt>错因分布</dt>
+        <dd>把做错的题按「概念不清 / 计算错误 / 审题错误 / 步骤遗漏」归个类，看哪类说法出现得最多，讲评时就先讲那一类。</dd>
+        <dt>五维</dt>
+        <dd>把卷面表现分成五个方面来看（概念理解、计算准确、审题、举一反三、记忆保持），画成五边形，哪条边短就补哪条。</dd>
+      </dl>
+    </details>
+  </section>
+
+  <!-- ④ 出错页 -->
+  <section id="view-error" class="view" aria-labelledby="err-h">
+    <div class="err-box">
+      <div class="err-icon" aria-hidden="true">!</div>
+      <h2 id="err-h">这份文件没能读出来</h2>
+      <p class="err-msg" id="err-msg"></p>
+      <ul class="err-tips" id="err-tips"></ul>
+      <div class="actions">
+        <button type="button" id="err-retry" class="btn btn-main">换一份试试</button>
+      </div>
+      <p class="err-foot" id="err-foot"></p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot no-print">分析都在本机完成 · 生成的表格存在这台电脑上 · 不会自动发送给任何人</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_MS = 800;        /* 多久问一次进度 */
+  var SLOW_MS = 90000;      /* 超过这么久还没算完，就换一句安慰话 */
+
+  var URLS = {
+    upload: "/api/upload",
+    run: "/api/run",
+    job: function (id) { return "/api/job/" + encodeURIComponent(id); },
+    file: function (id, name) { return "/api/file/" + encodeURIComponent(id) + "/" + encodeURIComponent(name); },
+    zip: function (id) { return "/api/zip/" + encodeURIComponent(id); }
+  };
+
+  /* 出现这些词时，后面必须跟一句人话解释（老师不是统计老师） */
+  var KPI_HINTS = [
+    [/区分度/, "越高越能分出谁会谁不会；低于 0.15 说明这道题白考"],
+    [/难度/, "就是得分率，越大说明越多人做对"],
+    [/临界生/, "离分数线差 10 分以内、再使把劲就能上的那批学生"],
+    [/错因/, "把做错的题按原因归了类，看哪类最多"],
+    [/率|比例|占比/, "按人数算的比例，100% 就是人人都拿到"]
+  ];
+
+  var WAIT_WORDS = [
+    "正在读表格…",
+    "正在把每道题的得分对到学生身上…",
+    "正在算班级对比…",
+    "正在找哪些题拉低了平均分…",
+    "正在整理成能看的表格…"
+  ];
+
+  var S = { job: null, name: "", timer: null, ticker: null, startedAt: 0, tick: 0, knownSteps: 0, miss: 0 };
+
+  function $(id) { return document.getElementById(id); }
+
+  function view(name) {
+    var all = ["upload", "run", "result", "error"];
+    for (var i = 0; i < all.length; i++) {
+      var node = $("view-" + all[i]);
+      if (!node) { continue; }
+      if (all[i] === name) { node.classList.add("is-active"); }
+      else { node.classList.remove("is-active"); }
+    }
+    window.scrollTo(0, 0);
+  }
+
+  function secs(ms) {
+    if (!ms || ms < 0) { return ""; }
+    if (ms < 1000) { return "不到 1 秒"; }
+    var s = ms / 1000;
+    return (s < 10 ? s.toFixed(1) : String(Math.round(s))) + " 秒";
+  }
+
+  function show(v) {
+    if (v === undefined || v === null) { return "—"; }
+    var s = String(v);
+    return s.length ? s : "—";
+  }
+
+  function hintFor(name) {
+    if (!name) { return ""; }
+    for (var i = 0; i < KPI_HINTS.length; i++) {
+      if (KPI_HINTS[i][0].test(name)) { return KPI_HINTS[i][1]; }
+    }
+    return "";
+  }
+
+  /* 一次请求：网络断了、服务报错、返回的不是预期格式，都转成人话 */
+  function ask(url, options) {
+    return fetch(url, options).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (body) {
+          var msg = "";
+          try {
+            var o = JSON.parse(body);
+            msg = o.error || o.message || "";
+          } catch (e) { msg = ""; }
+          if (!msg) {
+            /* 返回的是一段网页或英文报错时，别把技术字样甩给老师，留给下面用人话兜底 */
+            var plain = String(body || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+            if (/[\u4e00-\u9fa5]/.test(plain)) { msg = plain.slice(0, 120); }
+          }
+          var err = new Error(msg);
+          err.status = res.status;
+          throw err;
+        });
+      }
+      return res.json().catch(function () {
+        throw new Error("分析程序返回的内容看不懂，可能它出了点问题");
+      });
+    }, function () {
+      var err = new Error("连不上本机的分析程序");
+      err.offline = true;
+      throw err;
+    });
+  }
+
+  /* ---------- 出错页 ---------- */
+  function fail(title, msg, tips, foot) {
+    clearTimeout(S.timer);
+    clearInterval(S.ticker);
+    $("err-h").textContent = title;
+    $("err-msg").textContent = msg || "";
+    var ul = $("err-tips");
+    ul.innerHTML = "";
+    var list = tips || [];
+    for (var i = 0; i < list.length; i++) {
+      var li = document.createElement("li");
+      li.textContent = list[i];
+      ul.appendChild(li);
+    }
+    ul.style.display = list.length ? "" : "none";
+    $("err-foot").textContent = foot || "";
+    view("error");
+  }
+
+  var OFFLINE_TIPS = [
+    "看看启动分析程序时那个黑窗口还开着没有（关掉窗口就等于关掉了分析程序）",
+    "把这一页刷新一下，再重新选一次文件"
+  ];
+
+  function explain(err, when) {
+    if (err && err.offline) {
+      return { title: "连不上本机的分析程序", msg: "分析程序好像没在跑，所以这份表格没能读。", tips: OFFLINE_TIPS, foot: "" };
+    }
+    if (err && err.status === 413) {
+      return {
+        title: "这份表格太大了",
+        msg: "文件超过分析程序能处理的大小。",
+        tips: ["如果表里存了很多整张图片或多余的页签，先删掉再存一次",
+               "也可以把这一次考试拆成两份分别分析"],
+        foot: ""
+      };
+    }
+    if (err && err.status >= 500) {
+      return {
+        title: "分析程序出了点状况",
+        msg: err.message || "处理的时候中断了，没做完。",
+        tips: ["先重试一次，很多时候是文件正被别的程序占用",
+               "还不行就换一份简单点的表格（只要学号、姓名、总分三列）试一下"],
+        foot: "已经算到一半的结果可能不完整，请重新分析一次。"
+      };
+    }
+    if (when === "upload") {
+      return {
+        title: "这份文件没能读出来",
+        msg: err && err.message ? err.message : "分析程序看不出这份表格的结构。",
+        tips: ["确认这份文件正在别的窗口里打开着没有，Excel 打开的文件有时读不了，先关掉再选",
+               "确认表里第一行是表头（学号、姓名、分数这类），中间不要有空行或合并的大标题",
+               "如果这份是从 .xls 或 .csv 来的，用 Excel 另存为 .xlsx 再试"],
+        foot: ""
+      };
+    }
+    return {
+      title: "分析到一半出错了",
+      msg: err && err.message ? err.message : "分析程序没有说明原因就停了。",
+      tips: ["换一份简单点的表格试试：只要学号、姓名、总分三列",
+             "如果反复这样，把这份表格发给技术同事，让他们看一眼",
+             "已经生成的半成品文件可能不完整，别急着发出去"],
+      foot: ""
+    };
+  }
+
+  /* ---------- 上传 ---------- */
+  function backToUpload() {
+    clearTimeout(S.timer);
+    clearInterval(S.ticker);
+    S.job = null;
+    S.miss = 0;
+    S.knownSteps = 0;
+    S.tick = 0;
+    $("file").value = "";
+    $("run-file").textContent = "";
+    view("upload");
+  }
+
+  function start(file) {
+    if (!file) { return; }
+    if (!/\.xlsx$/i.test(file.name)) {
+      fail("只能分析 .xlsx 表格",
+        "你选的是「" + file.name + "」，这个格式分析程序读不了。",
+        ["在 Excel 里打开它，选「另存为」，文件类型挑「Excel 工作簿（.xlsx）」",
+         "如果它是压缩包，先解压，再选里面那个表格"],
+        "");
+      return;
+    }
+    S.name = file.name;
+    S.job = null;
+    S.miss = 0;
+    S.knownSteps = 0;
+    S.tick = 0;
+    $("run-file").textContent = file.name;
+    $("steps").innerHTML = "";
+    $("progress-fill").style.width = "0%";
+    $("progress-text").textContent = "正在把表格送到分析程序…";
+    $("progress-meta").textContent = "";
+    view("run");
+
+    var fd = new FormData();
+    fd.append("file", file, file.name);
+
+    ask(URLS.upload, { method: "POST", body: fd }).then(function (info) {
+      if (!info || !info.job) { throw new Error("分析程序没有返回这一次分析的编号"); }
+      S.job = info.job;
+      S.startedAt = Date.now();
+      startTicker();
+      return ask(URLS.run, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job: S.job })
+      });
+    }).then(function () {
+      poll();
+    }).catch(function (err) {
+      if (err && err.name === "TypeError") {
+        err = { offline: true };
+      }
+      var e = explain(err, "upload");
+      fail(e.title, e.msg, e.tips, e.foot);
+    });
+  }
+
+  function startTicker() {
+    clearInterval(S.ticker);
+    S.ticker = setInterval(function () {
+      if (!S.startedAt) { return; }
+      var t = Date.now() - S.startedAt;
+      var meta = $("progress-meta");
+      if (meta && t > 1000) {
+        meta.textContent = "已经等了 " + secs(t) + (t > SLOW_MS ? "，这份表格有点大，再等等" : "");
+      }
+    }, 1000);
+  }
+
+  /* ---------- 轮询进度 ---------- */
+  function poll() {
+    clearTimeout(S.timer);
+    if (!S.job) { return; }
+    ask(URLS.job(S.job)).then(function (info) {
+      S.miss = 0;
+      drawRun(info);
+      if (info.state === "done") { finish(info); return; }
+      if (info.state === "failed") {
+        var e = explain(new Error(info.error || ""), "run");
+        fail(e.title, info.error || e.msg, e.tips, e.foot);
+        return;
+      }
+      S.timer = setTimeout(poll, POLL_MS);
+    }).catch(function (err) {
+      S.miss += 1;
+      if (S.miss <= 3) {
+        S.timer = setTimeout(poll, POLL_MS * 2);
+        return;
+      }
+      if (err && err.name === "TypeError") { err = { offline: true }; }
+      var e = explain(err, "run");
+      fail(e.title, e.msg, e.tips, e.foot);
+    });
+  }
+
+  function stepLine(st) {
+    var state = st && st.state ? st.state : "pending";
+    if (!/^(done|running|failed|pending)$/.test(state)) { state = "pending"; }
+    var li = document.createElement("li");
+    li.className = "step step-" + state;
+    var mark = document.createElement("span");
+    mark.className = "step-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = state === "done" ? "✓" : (state === "failed" ? "×" : "");
+    var name = document.createElement("span");
+    name.className = "step-name";
+    name.textContent = (st && st.name) ? st.name : "正在处理";
+    li.appendChild(mark);
+    li.appendChild(name);
+    if (st && st.ms) {
+      var ms = document.createElement("span");
+      ms.className = "step-ms";
+      ms.textContent = secs(st.ms);
+      li.appendChild(ms);
+    }
+    if (state === "done") {
+      li.setAttribute("aria-label", name.textContent + " 已完成");
+    }
+    return li;
+  }
+
+  function drawRun(info) {
+    var steps = (info && info.steps) ? info.steps : [];
+    if (steps.length > S.knownSteps) { S.knownSteps = steps.length; }
+    var total = Math.max(steps.length, S.knownSteps, 1);
+    var done = 0;
+    var running = "";
+    var list = $("steps");
+    list.innerHTML = "";
+    for (var i = 0; i < steps.length; i++) {
+      var st = steps[i] || {};
+      if (st.state === "done") { done += 1; }
+      if (st.state === "running" && !running) { running = st.name || ""; }
+      list.appendChild(stepLine(st));
+    }
+    var pct = info && info.state === "done" ? 100 : Math.round(done / total * 100);
+    $("progress-fill").style.width = pct + "%";
+
+    S.tick += 1;
+    var word;
+    if (info && info.state === "done") {
+      word = "全部算完了。";
+    } else if (running) {
+      word = "正在算「" + running + "」…";
+    } else {
+      word = WAIT_WORDS[S.tick % WAIT_WORDS.length];
+    }
+    $("progress-text").textContent = word;
+
+    var meta = $("progress-meta");
+    var parts = ["已完成 " + done + " / " + total + " 步"];
+    if (S.startedAt) {
+      var t = Date.now() - S.startedAt;
+      parts.push("用了 " + secs(t));
+      if (t > SLOW_MS) { parts.push("这份表格有点大，再等等"); }
+    }
+    meta.textContent = parts.join(" · ");
+  }
+
+  /* ---------- 结果页 ---------- */
+  function kpiNode(k) {
+    var d = document.createElement("div");
+    d.className = "kpi";
+    var v = document.createElement("div");
+    v.className = "kpi-v";
+    v.textContent = show(k && k.v);
+    var kk = document.createElement("div");
+    kk.className = "kpi-k";
+    kk.textContent = (k && k.k) ? k.k : "";
+    d.appendChild(v);
+    d.appendChild(kk);
+    var hint = hintFor(k && k.k);
+    if (hint) {
+      var h = document.createElement("div");
+      h.className = "kpi-h";
+      h.textContent = "（" + hint + "）";
+      d.appendChild(h);
+    }
+    return d;
+  }
+
+  function cardNode(card) {
+    var wrap = document.createElement("article");
+    wrap.className = "card";
+    var h = document.createElement("h3");
+    h.textContent = (card && card.title) ? card.title : "分析结果";
+    wrap.appendChild(h);
+    var kpis = (card && card.kpis) ? card.kpis : [];
+    if (kpis.length) {
+      var box = document.createElement("div");
+      box.className = "kpis";
+      for (var i = 0; i < kpis.length; i++) { box.appendChild(kpiNode(kpis[i])); }
+      wrap.appendChild(box);
+    }
+    if (card && card.note) {
+      var n = document.createElement("p");
+      n.className = "card-note";
+      n.textContent = card.note;
+      wrap.appendChild(n);
+    }
+    return wrap;
+  }
+
+  function finish(info) {
+    clearTimeout(S.timer);
+    clearInterval(S.ticker);
+    $("progress-fill").style.width = "100%";
+    $("progress-text").textContent = "全部算完了。";
+    drawResult(info);
+    view("result");
+  }
+
+  function drawResult(info) {
+    var cards = (info && info.cards) ? info.cards : [];
+    var box = $("cards");
+    box.innerHTML = "";
+    if (!cards.length) {
+      var e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "这次没算出可以摆成卡片的数字，可以先打开下面生成的文件看明细。";
+      box.appendChild(e);
+    } else {
+      for (var i = 0; i < cards.length; i++) { box.appendChild(cardNode(cards[i])); }
+    }
+
+    var files = (info && info.files) ? info.files : [];
+    var ul = $("files");
+    ul.innerHTML = "";
+    for (var j = 0; j < files.length; j++) {
+      var f = files[j] || {};
+      var li = document.createElement("li");
+      var ic = document.createElement("span");
+      ic.className = "fs";
+      ic.setAttribute("aria-hidden", "true");
+      var a = document.createElement("a");
+      a.href = URLS.file(S.job, f.name || "");
+      a.textContent = f.name || "（未命名文件）";
+      if (f.path) { a.setAttribute("data-path", f.path); }
+      a.setAttribute("download", "");
+      li.appendChild(ic);
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    if (!files.length) {
+      var none = document.createElement("li");
+      none.textContent = "这一次没有生成文件。";
+      ul.appendChild(none);
+    }
+
+    var zip = $("zip");
+    if (files.length) {
+      zip.href = URLS.zip(S.job);
+      zip.style.display = "";
+    } else {
+      zip.style.display = "none";
+    }
+
+    var parts = [];
+    if (S.name) { parts.push("文件：" + S.name); }
+    if (S.startedAt) { parts.push("用时 " + secs(Date.now() - S.startedAt)); }
+    parts.push("生成 " + files.length + " 个文件");
+    $("res-sub").textContent = parts.join(" · ");
+  }
+
+  /* ---------- 事件 ---------- */
+  function bind() {
+    var drop = $("drop");
+    var input = $("file");
+
+    drop.addEventListener("click", function (e) {
+      if (e.target === input) { return; }
+      input.click();
+    });
+    drop.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        input.click();
+      }
+    });
+    input.addEventListener("change", function () {
+      start(input.files && input.files[0]);
+    });
+    ["dragenter", "dragover"].forEach(function (name) {
+      drop.addEventListener(name, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.classList.add("over");
+      });
+    });
+    ["dragleave", "dragend"].forEach(function (name) {
+      drop.addEventListener(name, function (e) {
+        e.preventDefault();
+        drop.classList.remove("over");
+      });
+    });
+    drop.addEventListener("drop", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.remove("over");
+      var dt = e.dataTransfer;
+      start(dt && dt.files && dt.files[0]);
+    });
+
+    window.addEventListener("dragover", function (e) { e.preventDefault(); });
+    window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+    $("again").addEventListener("click", backToUpload);
+    $("err-retry").addEventListener("click", backToUpload);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+})();
+</script>
+</body>
+</html>

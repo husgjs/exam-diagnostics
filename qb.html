@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>题库录入</title>
+<style>
+  :root{
+    --ink:#1b2330;--ink2:#5a6577;--line:#dfe5ee;--bg:#f4f6fa;--card:#fff;
+    --blue:#2f6fed;--blue-d:#1f57c8;--green:#17a673;--amber:#b8791a;--amber-bg:#fff6e0;
+    --red:#d9483f;--shadow:0 1px 2px rgba(27,35,48,.06),0 8px 24px rgba(27,35,48,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);padding:20px 16px 60px;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{margin:0;color:var(--ink2);font-size:13.5px}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 14px}
+  .bar .grow{flex:1 1 auto}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;
+    border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    font:inherit;font-weight:600;cursor:pointer;white-space:nowrap;text-decoration:none}
+  .btn:hover{background:#f7f9fc}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-d)}
+  .btn.danger{color:var(--red);border-color:#f0cbc8}
+  .btn.danger:hover{background:#fdf1f0}
+  .btn.small{padding:5px 12px;font-size:13px;font-weight:500}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;
+    overflow:hidden;box-shadow:var(--shadow)}
+  th,td{padding:10px 12px;text-align:left;border-top:1px solid var(--line);font-size:14px;vertical-align:middle}
+  thead th{background:#f7f9fc;border-top:0;color:var(--ink2);font-weight:600;font-size:13px}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#f9fbff}
+  tr.warn td{background:var(--amber-bg)}
+  tr.warn:hover td{background:#fff1cf}
+  .no{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .kp{color:var(--ink)}
+  .dim{color:#98a3b4}
+  .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:#eef2f8;color:var(--ink2)}
+  .tag.easy{background:#e8f4ee;color:#12694a}
+  .tag.mid{background:#eef2fb;color:#2f4f9e}
+  .tag.hard{background:#fbeeed;color:#a92f27}
+  .miss{color:var(--amber);font-weight:600}
+  .stemcell{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .card{background:var(--card);border-radius:12px;box-shadow:var(--shadow);padding:18px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .row{display:flex;flex-direction:column;gap:5px}
+  .row.full{grid-column:1 / -1}
+  label{font-size:13px;color:var(--ink2);font-weight:600}
+  input[type=text],input[type=number],textarea,select{
+    font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);width:100%}
+  input:focus,textarea:focus,select:focus{outline:2px solid #cfe0ff;border-color:var(--blue)}
+  textarea{resize:vertical;min-height:74px}
+  .hint{font-size:12.5px;color:#98a3b4}
+  .optrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .optrow input{flex:1 1 auto}
+  .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+
+  .msg{border-radius:10px;padding:11px 14px;margin:0 0 14px;font-size:14px;display:none}
+  .msg.show{display:block}
+  .msg.ok{background:#e8f4ee;color:#12694a;border:1px solid #cbe6d9}
+  .msg.bad{background:#fdf1f0;color:#a92f27;border:1px solid #f6d2cf}
+  .msg ul{margin:6px 0 0;padding-left:20px}
+  .msg li{margin:2px 0}
+
+  .mask{position:fixed;inset:0;background:rgba(20,28,40,.42);display:none;align-items:center;
+    justify-content:center;padding:20px;z-index:20}
+  .mask.show{display:flex}
+  .modal{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:86vh;overflow:auto;padding:20px}
+  .modal h3{margin:0 0 10px;font-size:17px}
+  .sum{font-size:15px;margin:0 0 4px}
+  .sum b{font-size:19px;font-variant-numeric:tabular-nums}
+  .sum .a{color:var(--green)} .sum .o{color:var(--blue)} .sum .s{color:var(--amber)}
+  .skip{margin:10px 0 0;padding-left:20px;max-height:170px;overflow:auto;font-size:13.5px;color:#8a5a10}
+  .preview{margin-top:12px;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:240px}
+  .preview table{box-shadow:none;border-radius:0}
+  .empty{padding:34px;text-align:center;color:var(--ink2);background:var(--card);border-radius:12px;box-shadow:var(--shadow)}
+  @media (max-width:640px){
+    .form{grid-template-columns:1fr}
+    .stemcell{max-width:150px}
+    th,td{padding:8px}
+    body{padding:14px 10px 50px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>题库录入</h1>
+  <p class="sub" id="stat">正在读题库…</p>
+
+  <div class="bar">
+    <button type="button" class="btn" id="btnExport">导出 Excel</button>
+    <button type="button" class="btn" id="btnImport">导入 Excel</button>
+    <button type="button" class="btn primary" id="btnNew">新增一题</button>
+    <span class="grow"></span>
+  </div>
+  <input type="file" id="fileImport" accept=".xlsx" hidden>
+
+  <div class="msg" id="msg"></div>
+
+  <!-- ① 列表 -->
+  <div id="viewList">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:70px">题号</th>
+          <th style="width:180px">知识点</th>
+          <th style="width:80px">难度</th>
+          <th style="width:90px">来源</th>
+          <th>题干（前 20 字）</th>
+          <th style="width:90px">题干录了吗</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">题库里还没有题，点右上角「新增一题」开始录。</div>
+  </div>
+
+  <!-- ② 编辑 -->
+  <div id="viewEdit" style="display:none">
+    <div class="card">
+      <div class="form">
+        <div class="row">
+          <label for="fNo">题号</label>
+          <input type="text" id="fNo" placeholder="例如 24">
+          <span class="hint">题号是这道题的唯一名字，重复了会覆盖原来那条。</span>
+        </div>
+        <div class="row">
+          <label for="fChapter">章节</label>
+          <input type="text" id="fChapter" placeholder="例如 1.2">
+        </div>
+        <div class="row">
+          <label for="fKp">知识点</label>
+          <input type="text" id="fKp" placeholder="例如 相反数">
+        </div>
+        <div class="row">
+          <label for="fFull">满分</label>
+          <input type="number" id="fFull" step="0.5" min="0.5" placeholder="例如 3">
+        </div>
+        <div class="row">
+          <label for="fDiff">难度</label>
+          <select id="fDiff">
+            <option value="easy">简单</option>
+            <option value="mid">中等</option>
+            <option value="hard">难题</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="fSrc">来源</label>
+          <select id="fSrc">
+            <option value="真实卷">真实卷（考过的原题）</option>
+            <option value="自编">自编（自己出的题）</option>
+            <option value="真题改编">真题改编（改过的）</option>
+          </select>
+          <span class="hint">哪来的题就选哪类，将来要按来源分开看质量和错误率。</span>
+        </div>
+        <div class="row">
+          <label for="fErr">错因倾向</label>
+          <input type="text" id="fErr" placeholder="例如 概念不清">
+        </div>
+        <div class="row full">
+          <label for="fStem">题干</label>
+          <textarea id="fStem" placeholder="题目怎么写的就怎么抄。先不录也行，回头再补。"></textarea>
+          <span class="hint">题干可以先空着，以后补；列表里会标黄提醒你。</span>
+        </div>
+        <div class="row full">
+          <label for="fAnswer">答案</label>
+          <textarea id="fAnswer" placeholder="标准答案"></textarea>
+        </div>
+        <div class="row full">
+          <label>选项</label>
+          <div id="optBox"></div>
+          <div><button type="button" class="btn small" id="btnAddOpt">再加一个选项</button></div>
+          <span class="hint">选择题才需要填；填空题、解答题留空就行。</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="btnSave">保存</button>
+        <button type="button" class="btn" id="btnCancel">返回列表</button>
+        <span class="grow"></span>
+        <button type="button" class="btn danger" id="btnDelete" style="display:none">删除这题</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 导入预览 -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <h3>导入预览</h3>
+    <p class="sum" id="sumLine"></p>
+    <p class="hint" id="sumSub"></p>
+    <ul class="skip" id="skipList"></ul>
+    <div class="preview" id="previewBox"></div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="btnConfirm">确认导入</button>
+      <button type="button" class="btn" id="btnCancelImport">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var J = window.JSON;                  // 浏览器自带的打包工具，只在代码里用，页面上不出现
+  var DIFF_CN = { easy: "简单", mid: "中等", hard: "难题" };
+  var items = [];
+  var editing = null;      // 正在编辑的题号，null = 新增
+  var pendingToken = null;
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function say(kind, title, list) {
+    var box = $("msg");
+    box.className = "msg show " + kind;
+    var html = esc(title);
+    if (list && list.length) {
+      html += "<ul>";
+      for (var i = 0; i < list.length; i++) { html += "<li>" + esc(list[i]) + "</li>"; }
+      html += "</ul>";
+    }
+    box.innerHTML = html;
+    window.scrollTo(0, 0);
+  }
+
+  function clearSay() {
+    var box = $("msg");
+    box.className = "msg";
+    box.innerHTML = "";
+  }
+
+  /* ---------------- 列表 ---------------- */
+  function load() {
+    return fetch("/api/qb")
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || j.ok === false) { throw new Error((j && j.error) || "题库读不出来"); }
+        items = j.items || [];
+        renderList(j);
+        return j;
+      })
+      .catch(function (e) { say("bad", "题库没能读出来：" + (e && e.message ? e.message : e)); });
+  }
+
+  function renderList(j) {
+    var miss = 0, html = "", i, it, stem, head;
+    for (i = 0; i < items.length; i++) {
+      it = items[i];
+      stem = String(it.stem || "").trim();
+      if (!stem) { miss++; }
+      head = stem ? esc(stem.slice(0, 20)) + (stem.length > 20 ? "…" : "") : '<span class="miss">（还没录题干）</span>';
+      html += '<tr class="' + (stem ? "" : "warn") + '" data-no="' + esc(it.no) + '">' +
+        '<td class="no">' + esc(it.no) + "</td>" +
+        '<td class="kp">' + esc(it.kp || "") + "</td>" +
+        '<td><span class="tag ' + esc(it.difficulty || "") + '">' + esc(DIFF_CN[it.difficulty] || it.difficulty || "") + "</span></td>" +
+        '<td class="dim">' + esc(it.source || "真实卷") + "</td>" +
+        '<td class="stemcell">' + head + "</td>" +
+        '<td>' + (stem ? '<span class="dim">已录</span>' : '<span class="miss">缺</span>') + "</td>" +
+        "</tr>";
+    }
+    $("tbody").innerHTML = html;
+    $("empty").style.display = items.length ? "none" : "block";
+    $("stat").textContent = "共 " + items.length + " 题" +
+      (miss ? ("，" + miss + " 题还没录题干（黄色那几行）") : "，题干都录齐了") +
+      (j.book ? ("　·　" + j.book) : "");
+    var rows = $("tbody").getElementsByTagName("tr");
+    for (i = 0; i < rows.length; i++) {
+      rows[i].onclick = function () { openEdit(this.getAttribute("data-no")); };
+    }
+  }
+
+  /* ---------------- 编辑 ---------------- */
+  function setOpts(list) {
+    $("optBox").innerHTML = "";
+    var arr = (list && list.length) ? list : [""];
+    for (var i = 0; i < arr.length; i++) { addOpt(arr[i]); }
+  }
+
+  function addOpt(v) {
+    var row = document.createElement("div");
+    row.className = "optrow";
+    var inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = v || "";
+    inp.placeholder = "例如 A. -5";
+    var del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn small danger";
+    del.textContent = "去掉";
+    del.onclick = function () { row.parentNode.removeChild(row); };
+    row.appendChild(inp);
+    row.appendChild(del);
+    $("optBox").appendChild(row);
+  }
+
+  function readOpts() {
+    var out = [], rows = $("optBox").getElementsByTagName("input");
+    for (var i = 0; i < rows.length; i++) {
+      var v = rows[i].value.trim();
+      if (v) { out.push(v); }
+    }
+    return out;
+  }
+
+  function openEdit(no) {
+    clearSay();
+    var it = null, i;
+    for (i = 0; i < items.length; i++) { if (String(items[i].no) === String(no)) { it = items[i]; break; } }
+    editing = it ? String(it.no) : null;
+    $("fNo").value = it ? it.no : "";
+    $("fNo").readOnly = !!it;
+    $("fChapter").value = it ? (it.chapter || "") : "";
+    $("fKp").value = it ? (it.kp || "") : "";
+    $("fFull").value = it ? it.full : "";
+    $("fDiff").value = it && DIFF_CN[it.difficulty] ? it.difficulty : "easy";
+    var src = (it && it.source) ? String(it.source) : "真实卷";
+    var sel = $("fSrc"), found = false, i2;
+    for (i2 = 0; i2 < sel.options.length; i2++) { if (sel.options[i2].value === src) { found = true; break; } }
+    if (!found) { var op = document.createElement("option"); op.value = src; op.text = src; sel.appendChild(op); }
+    sel.value = src;
+    $("fErr").value = it ? (it.err || "") : "";
+    $("fStem").value = it ? (it.stem || "") : "";
+    $("fAnswer").value = it ? (it.answer || "") : "";
+    setOpts(it ? (it.options || []) : []);
+    $("btnDelete").style.display = it ? "inline-flex" : "none";
+    $("viewList").style.display = "none";
+    $("viewEdit").style.display = "block";
+    window.scrollTo(0, 0);
+  }
+
+  function backToList() {
+    editing = null;
+    $("viewEdit").style.display = "none";
+    $("viewList").style.display = "block";
+  }
+
+  function collect() {
+    return {
+      no: $("fNo").value.trim(),
+      chapter: $("fChapter").value.trim(),
+      kp: $("fKp").value.trim(),
+      full: $("fFull").value.trim(),
+      difficulty: $("fDiff").value,
+      source: $("fSrc").value,
+      err: $("fErr").value.trim(),
+      stem: $("fStem").value.trim(),
+      answer: $("fAnswer").value.trim(),
+      options: readOpts()
+    };
+  }
+
+  function save() {
+    var body = collect(), bad = [];
+    if (!body.no) { bad.push("题号要填。"); }
+    if (body.full === "" || isNaN(Number(body.full)) || Number(body.full) <= 0) { bad.push("满分要填一个大于 0 的数字。"); }
+    if (!body.kp) { bad.push("知识点要填。"); }
+    if (bad.length) { say("bad", "还没填完，先补一下：", bad); return; }
+
+    fetch("/api/qb", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: J.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (res) {
+      if (!res.ok || !res.j.ok) {
+        var lines = [];
+        var es = (res.j && res.j.errors) || [];
+        for (var i = 0; i < es.length; i++) { lines.push(es[i].field + "：" + es[i].message); }
+        say("bad", (res.j && res.j.error) || "没能存进去。", lines);
+        return;
+      }
+      backToList();
+      load().then(function () {
+        say("ok", res.j.message || "已存好。");
+      });
+    }).catch(function (e) { say("bad", "存不进去：" + (e && e.message ? e.message : e)); });
+  }
+
+  function removeItem() {
+    if (!editing) { return; }
+    if (!window.confirm("确定把第 " + editing + " 题从题库里删掉吗？删了就要重新录。")) { return; }
+    fetch("/api/qb/" + encodeURIComponent(editing), { method: "DELETE" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { say("bad", (res.j && res.j.error) || "删除没成功。"); return; }
+        backToList();
+        load().then(function () { say("ok", "第 " + res.j.removed + " 题已删掉。"); });
+      })
+      .catch(function (e) { say("bad", "删除没成功：" + (e && e.message ? e.message : e)); });
+  }
+
+  /* ---------------- 导入导出 ---------------- */
+  function doExport() {
+    window.location.href = "/api/qb/export";
+  }
+
+  function doImport(file) {
+    if (!file) { return; }
+    if (!/\.xlsx$/i.test(file.name)) {
+      say("bad", "只认 .xlsx 表格。你选的是「" + file.name + "」，请在 Excel 里另存为 .xlsx 再来。");
+      return;
+    }
+    var fd = new FormData();
+    fd.append("file", file, file.name);
+    clearSay();
+    fetch("/api/qb/import", { method: "POST", body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.ok) { say("bad", (res.j && res.j.error) || "这个表格读不进来。"); return; }
+        showPreview(res.j);
+      })
+      .catch(function (e) { say("bad", "表格没能传上去：" + (e && e.message ? e.message : e)); });
+  }
+
+  function showPreview(j) {
+    pendingToken = j.token;
+    $("sumLine").innerHTML =
+      "将新增 <b class='a'>" + j.add + "</b> 条、覆盖 <b class='o'>" + j.overwrite + "</b> 条、" +
+      "跳过 <b class='s'>" + j.skip + "</b> 条";
+    var sub = "表格里一共 " + j.rows + " 行。";
+    if (j.missing_stem) { sub += "其中 " + j.missing_stem + " 条没有题干，导入后会在列表里标黄。"; }
+    if (!j.add && !j.overwrite) { sub += "这次没有需要写进去的内容。"; }
+    $("sumSub").textContent = sub;
+
+    var sk = j.skipped || [], html = "";
+    for (var i = 0; i < sk.length; i++) {
+      html += "<li>第 " + sk[i].row + " 行" + (sk[i].no ? ("（题号 " + esc(sk[i].no) + "）") : "") +
+        "：" + esc(sk[i].reason) + "</li>";
+    }
+    $("skipList").innerHTML = html;
+    $("skipList").title = "";
+
+    var pv = j.preview || [], rows = "";
+    for (var k = 0; k < pv.length; k++) {
+      rows += "<tr><td class='no'>" + esc(pv[k].no) + "</td><td>" + esc(pv[k].kp) + "</td><td>" + esc(pv[k].full) +
+        "</td><td>" + esc(pv[k].difficulty) + "</td><td>" + (pv[k].stem ? esc(pv[k].stem) : "<span class='miss'>（没题干）</span>") + "</td></tr>";
+    }
+    $("previewBox").innerHTML = pv.length
+      ? ("<table><thead><tr><th>题号</th><th>知识点</th><th>满分</th><th>难度</th><th>题干</th></tr></thead><tbody>" + rows + "</tbody></table>")
+      : "";
+    $("btnConfirm").disabled = (!j.add && !j.overwrite);
+    $("mask").classList.add("show");
+  }
+
+  function closePreview() {
+    $("mask").classList.remove("show");
+    pendingToken = null;
+  }
+
+  function commitImport() {
+    if (!pendingToken) { return; }
+    var token = pendingToken;
+    fetch("/api/qb/import/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: J.stringify({ token: token })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.ok) { say("bad", (res.j && res.j.error) || "导入没成功。"); return; }
+        closePreview();
+        load().then(function () {
+          say("ok", "导入完成：新增 " + res.j.add + " 条、覆盖 " + res.j.overwrite + " 条，现在一共 " + res.j.total + " 题。");
+        });
+      })
+      .catch(function (e) { say("bad", "导入没成功：" + (e && e.message ? e.message : e)); });
+  }
+
+  /* ---------------- 绑定 ---------------- */
+  $("btnExport").onclick = doExport;
+  $("btnImport").onclick = function () { $("fileImport").value = ""; $("fileImport").click(); };
+  $("fileImport").onchange = function (e) { if (e.target.files && e.target.files[0]) { doImport(e.target.files[0]); } };
+  $("btnNew").onclick = function () { openEdit(null); };
+  $("btnAddOpt").onclick = function () { addOpt(""); };
+  $("btnSave").onclick = save;
+  $("btnCancel").onclick = function () { clearSay(); backToList(); };
+  $("btnDelete").onclick = removeItem;
+  $("btnConfirm").onclick = commitImport;
+  $("btnCancelImport").onclick = closePreview;
+  $("mask").onclick = function (e) { if (e.target === $("mask")) { closePreview(); } };
+
+  load();
+})();
+</script>
+</body>
+</html>
