@@ -44,6 +44,7 @@ GOOD_LINE = 510        # 600 × 85%
 # 「两极分化」不设绝对分数线：拿班级标准差去比年级标准差。
 # 一开始用的绝对阈值（σ ≥ 60 分）在真实数据上八个班全部触发，等于没判；
 # 相对判据才能区分「这个班比年级更散」和「这个班比年级更齐」。
+MIN_GROUP = 3          # 群组下限：有效人数低于它就不出群体结论（一对一/小班）
 SPLIT_RATIO = 1.15     # σ_班 / σ_年级 ≥ 1.15 → 两极分化
 TIGHT_RATIO = 0.85     # σ_班 / σ_年级 ≤ 0.85 → 比年级更集中
 NEAR_BAND = 30         # 临界生：距及格线 ±30 分
@@ -358,7 +359,10 @@ def build_student_card(rows, gidx, stu):
         "sub": "九年级月考 · 满分 600 分（语文 100 / 数学 150 / 英语 150 / 物理 100 / 化学 100）",
         "big": [("总分", fg(stu["total"])),
                 ("年级名次", "%d / %d" % (stu["grade_rank"], gidx["n"])),
-                ("班级名次", "%d / %d" % (stu["class_rank"], stu["class_valid"])),
+                # 本班有效人数不足群组下限时，班内名次没有意义：一对一报告不拿「1/1」当结论
+                ("班级名次", ("%d / %d" % (stu["class_rank"], stu["class_valid"]))
+                 if stu["class_valid"] >= MIN_GROUP
+                 else "—（本班有效 %d 人，少于 %d 人，不排名次）" % (stu["class_valid"], MIN_GROUP)),
                 ("总分得分率", f1(rate(stu["total"], TOTAL_FULL)) + "%")],
         "tables": table,
         "strong": "%s %s%%（年级 %s%%）" % (strong, f1(s_rate), f1(gs_rate)),
@@ -371,17 +375,29 @@ def build_student_card(rows, gidx, stu):
                   "（全年级 %d 人，其中 %d 人总分 0 = 缺考/未录入，不计入统计与名次）。"
                   % (gidx["n"], gidx["n_all"], gidx["n_absent"]),
                   "班级名次在本班计入排名的 %d 人里排（本班共 %d 人，%d 人缺考不占名次）。"
-                  % (stu["class_valid"], stu["class_size"], stu["class_size"] - stu["class_valid"])],
+                  % (stu["class_valid"], stu["class_size"], stu["class_size"] - stu["class_valid"])
+                  if stu["class_valid"] >= MIN_GROUP
+                  else "本班有效成绩只有 %d 人（少于群组下限 %d 人）：不排名次，也不做横向比较。"
+                       % (stu["class_valid"], MIN_GROUP)],
         "file": "学情卡_%s.html" % stu["name"],
     }
 
 
 # ------------------------------------------------------------------ #13 一页纸班级诊断
-def build_class_card(rows, gidx, cls):
+def build_class_card(rows, gidx, cls, min_group=None):
+    if min_group is None:
+        min_group = MIN_GROUP
     members = pick_class(rows, cls)
     ok = valid_rows(members)                      # 计入统计的人（缺考剔除）
     totals = [r["total"] for r in ok]
     n = len(totals)
+    if n < min_group:
+        # 拒绝生成，不静默出空卡：1~2 个人撑不起班级诊断的任何一条群体结论
+        raise UserError(
+            "「%s」有效成绩只有 %d 人，少于群组下限 %d 人 —— 一页纸班级诊断要出的是群体结论"
+            "（平均水平、达标比例、班内差异幅度判断），这个人数算出来就是误导，所以不生成。"
+            "要看单人请用 student 子命令；确实要按这个小组出诊断，请显式把下限调小（--min-group %d）。"
+            % (cls, n, min_group, n if n > 0 else 1))
     mean = statistics.mean(totals)
     sigma = statistics.pstdev(totals)
     pass_n = sum(1 for t in totals if t >= PASS_LINE)
@@ -495,11 +511,16 @@ def build_talk_card(rows, gidx, stu):
     dmini = stu["mini_rank"] - stu["grade_rank"]
     passed = stu["total"] >= PASS_LINE
 
+    # 本班有效人数不足群组下限时，班内名次没有意义（1 人班也有"第 1 名"）：一对一话术卡里不报
+    rank_txt = ("班级第 %d 名（本班 %d 人计入排名，共 %d 人）。"
+                % (stu["class_rank"], stu["class_valid"], stu["class_size"])
+                if stu["class_valid"] >= MIN_GROUP
+                else "本班有效成绩只有 %d 人（少于群组下限 %d 人）：不排名次，也不做横向比较。"
+                     % (stu["class_valid"], MIN_GROUP))
     facts = [
-        "总分 %s 分（满分 %d），年级第 %d 名（共 %d 人计入排名，全年级 %d 人、其中 %d 人缺考不计），"
-        "班级第 %d 名（本班 %d 人计入排名，共 %d 人）。"
+        "总分 %s 分（满分 %d），年级第 %d 名（共 %d 人计入排名，全年级 %d 人、其中 %d 人缺考不计），%s"
         % (fg(stu["total"]), TOTAL_FULL, stu["grade_rank"], gidx["n"], gidx["n_all"], gidx["n_absent"],
-           stu["class_rank"], stu["class_valid"], stu["class_size"]),
+           rank_txt),
         "五科得分率：%s。" % "、".join("%s %s%%" % (nm, f1(rates[nm])) for nm in SUBJ_NAMES),
         "和年级均分 %s 分比，%s 分；及格线 %d 分，%s。"
         % (f1(gidx["mean"]), ("高 %s" % f1(stu["total"] - gidx["mean"])) if stu["total"] >= gidx["mean"]
@@ -790,6 +811,8 @@ def main(argv=None):
 
     p2 = sub.add_parser("class", help="一页纸班级诊断")
     p2.add_argument("--name", required=True, help="班级名，例如 九年级2班")
+    p2.add_argument("--min-group", dest="min_group", type=int, default=MIN_GROUP,
+                    help="群组下限：有效人数低于它拒绝生成班级诊断（默认 %d）" % MIN_GROUP)
 
     p3 = sub.add_parser("talk", help="教师话术卡")
     p3.add_argument("--name", required=True, help="学生姓名")
@@ -806,7 +829,7 @@ def main(argv=None):
         if args.cmd == "student":
             card = build_student_card(rows, gidx, pick_student(rows, args.name, getattr(args, "cls", None)))
         elif args.cmd == "class":
-            card = build_class_card(rows, gidx, args.name)
+            card = build_class_card(rows, gidx, args.name, getattr(args, "min_group", MIN_GROUP))
         else:
             card = build_talk_card(rows, gidx, pick_student(rows, args.name, getattr(args, "cls", None)))
     except UserError as e:

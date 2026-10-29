@@ -466,6 +466,10 @@ def build_review(qs, meta, top=5, budget=40, time_by="rate"):
 
 
 def cmd_review(args):
+    if getattr(args, "student", None):
+        return cmd_review_student(args)
+    if getattr(args, "scores", None):
+        print("提示: --scores 只作用于 --student 个体版；要看全班的逐题得分清单，请用 review2 --scores。")
     qs, meta = load_questions(args.src, args.db, args.rows)
     doc = build_review(qs, meta, args.top, args.budget, args.time_by)
     path = jdump(doc, os.path.join(out_dir(), "讲评清单.json"))
@@ -484,6 +488,355 @@ def cmd_review(args):
     print("合计: %d 分钟 ｜ 上限 %d 分钟 ｜ 预留机动 %d 分钟" % (
         doc["meta"]["total_minutes"], doc["meta"]["budget"], doc["meta"]["slack"]))
     assert doc["meta"]["total_minutes"] <= doc["meta"]["budget"], "讲评时长超出预算"
+    print("清单文件: %s (%d 字节)" % (path, os.path.getsize(path)))
+    return 0
+
+
+# ============================================================ 个体讲评 / 集体补漏（读逐题得分）
+UNAVAIL = "不可用（缺逐题得分）"
+SCORES_NEED = "要这两个视角，必须先有一份「逐题得分」表，表头：学生,题号,知识点,满分,得分（知识点、满分可省）。"
+
+
+def _no_sort_key(no):
+    m = re.search(r"\d+", str(no))
+    return (int(m.group(0)) if m else 99999, str(no))
+
+
+def _pick_student(names, want):
+    """先精确匹配，再包含匹配。返回 (命中的名字 或 None, 候选列表)。"""
+    w = str(want or "").strip()
+    if w in names:
+        return w, []
+    hit = [n for n in names if w and w in n]
+    if len(hit) == 1:
+        return hit[0], []
+    return None, hit
+
+
+def _xlsx_probe(path):
+    """只读探一下这张成绩单：多少人、几班、认不认得出「每题一列」。
+    用 ingest.py 的公开 API，不改它。读不动就返回 err。"""
+    out = {"err": "", "people": 0, "classes": 0, "sheets": 0, "qcols": 0, "names": []}
+    if not path or not os.path.exists(path):
+        out["err"] = "找不到这个文件：%s" % (path or "（没给路径）")
+        return out
+    try:
+        import ingest
+    except Exception as e:                                    # noqa: BLE001
+        out["err"] = "调不到同目录的 ingest.py（%s）" % e
+        return out
+    try:
+        recs, rep = ingest.read_all_sheets(path)
+    except Exception as e:                                    # noqa: BLE001
+        out["err"] = "这张成绩单读不动：%s" % e
+        return out
+    out["sheets"] = len(rep.get("sheets") or [])
+    out["people"] = len(recs)
+    out["classes"] = len({str(r.get("cls") or "").strip() for r in recs if str(r.get("cls") or "").strip()})
+    out["names"] = [str(r.get("name") or "").strip() for r in recs if str(r.get("name") or "").strip()]
+    seen = set()
+    for r in recs:
+        sh = r.get("__sheet")
+        if sh in seen:
+            continue
+        seen.add(sh)
+        try:
+            out["qcols"] += len(ingest.detect_question_cols(list((r.get("raw") or {}).keys())))
+        except Exception:                                     # noqa: BLE001
+            pass
+    return out
+
+
+def _say_missing_scores(xlsx, tail_lines, who=None):
+    """统一输出「不可用（缺逐题得分）」，并说清楚缺什么、怎么补。退出码由调用方给 0。"""
+    print()
+    if xlsx:
+        info = _xlsx_probe(xlsx)
+        if info["err"]:
+            print("  成绩单先没读成：%s" % info["err"])
+        else:
+            print("  这张成绩单读到了：%d 人 / %d 班 / %d 个表 ｜ %s"
+                  % (info["people"], info["classes"], info["sheets"], os.path.basename(xlsx)))
+            if info["qcols"]:
+                print("  表里确实有 %d 个「每题一列」的题号列，但本命令只吃标准逐题得分表"
+                      "（学生,题号,知识点,满分,得分），请先另存成那种表。" % info["qcols"])
+            else:
+                print("  但它只有科目总分，一题都没有 → 算不出「哪几题」。")
+            if who and info["names"]:
+                hit = [n for n in info["names"] if n == who] or [n for n in info["names"] if who in n]
+                if hit:
+                    print("  这个人表里有：%s" % "、".join(hit[:3]))
+                else:
+                    print("  另外：表里没找到「%s」这个名字，先核对一下写法。" % who)
+    print(UNAVAIL)
+    for line in tail_lines:
+        print("  " + line)
+    print("  不按总分估算、不猜哪题错——这是口径，不放宽。")
+
+
+def _student_unavailable(args, name):
+    print()
+    print("学生：%s" % name)
+    xlsx = getattr(args, "xlsx", None)
+    _say_missing_scores(xlsx, [
+        "没有逐题得分，就看不出「%s 哪几题不会」，个体讲评不出。" % name,
+        SCORES_NEED,
+        "拿到之后这样跑：python teaching.py review --student %s --scores <逐题得分.csv>" % name,
+    ], who=name)
+    return 0
+
+
+def cmd_review_student(args):
+    name = str(args.student).strip()
+    print("=" * 78)
+    print("讲评清单 · 个体版（学生：%s）" % name)
+    print("=" * 78)
+    if not getattr(args, "scores", None):
+        return _student_unavailable(args, name)
+
+    bank = load_bank(getattr(args, "bank", None))
+    if bank["err"]:
+        print(bank["err"])
+        print("题库读不到，「讲什么」补不上，个体版这次不出。")
+        return 2
+    try:
+        rows, wide, warn = _parse_scores(args.scores, bank)
+    except ScoresError as e:
+        print("--scores 这份表用不了：")
+        for line in str(e).splitlines():
+            print("  " + line)
+        return 2
+    print("数据来源: 逐题得分 %s（%s ｜ %d 行 / %d 人）"
+          % (os.path.basename(args.scores), "宽表" if wide else "长表",
+             len(rows), len({r["stu"] for r in rows})))
+    for w in warn[:4]:
+        print("  ! %s" % w)
+
+    names = sorted({r["stu"] for r in rows})
+    who, cand = _pick_student(names, name)
+    if not who:
+        print()
+        print("这份逐题得分里（共 %d 人）找不到「%s」。" % (len(names), name))
+        if cand:
+            print("  像是这几个：%s" % "、".join(cand[:10]))
+        else:
+            print("  表里的学生：%s%s" % ("、".join(names[:20]), "…" if len(names) > 20 else ""))
+        return 2
+    if who != name:
+        print("  按「%s」匹配到表里的「%s」。" % (name, who))
+
+    mine = [r for r in rows if r["stu"] == who]
+    mine.sort(key=lambda r: _no_sort_key(r["no"]))
+    tot_full = sum(r["full"] for r in mine)
+    tot_got = sum(r["got"] for r in mine)
+    print()
+    print("这次考试: %d 题 ｜ 满分 %g ｜ 实得 %g ｜ 失分 %g"
+          % (len(mine), tot_full, tot_got, tot_full - tot_got))
+
+    lost = [r for r in mine if r["full"] and r["got"] < r["full"] - 1e-9]
+    if not lost:
+        print()
+        print("这名学生这次没有失分题（%d 题全对），个体讲评不用出。" % len(mine))
+        return 0
+
+    item_by_no = {}
+    for it in bank["items"]:
+        item_by_no[str(it.get("no"))] = it
+    for r in lost:
+        it = item_by_no.get(r["no"], {})
+        r["loss"] = r["full"] - r["got"]
+        r["err"] = str(it.get("err") or "")
+        r["kp"] = str(it.get("kp") or r.get("kp") or "未标注")
+        r["stem"] = str(it.get("stem") or "")
+    lost.sort(key=lambda r: (-r["loss"], -r["full"], _no_sort_key(r["no"])))
+
+    sched, rest = plan_schedule(lost, args.budget, 3, 8, args.top, key="loss")
+    total_min = sum(m for _, m in sched)
+    print()
+    print("%-3s %-5s %-16s %-8s %-5s %-14s %s"
+          % ("#", "题号", "知识点(满分)", "得分", "失分", "讲多久", "讲什么"))
+    print("-" * 78)
+    for i, (r, m) in enumerate(sched, 1):
+        print("%-3d %-5s %-16s %-8s %-5s %-14s %s"
+              % (i, r["no"], "%s(%g分)" % (r["kp"], r["full"]),
+                 "%g/%g" % (r["got"], r["full"]), "%g" % r["loss"],
+                 "%d 分 / %d 秒" % (m, m * 60),
+                 WHY.get(r["err"], WHY_DEFAULT).format(kp=r["kp"])))
+    print("-" * 78)
+    print("合计: %d 分钟 = %d 秒 ｜ 上限 %d 分钟 ｜ 富余 %d 分钟"
+          % (total_min, total_min * 60, args.budget, args.budget - total_min))
+    print("口径: 只含 %s 本人失分的题（共 %d 道），按失分从大到小排；单题 3–8 分钟，按失分分配。"
+          % (who, len(lost)))
+    if rest:
+        print()
+        print("这次排不下，下次继续（%d 道）:" % len(rest))
+        for r in rest:
+            print("  第 %s 题 · %s · 失分 %g" % (r["no"], r["kp"], r["loss"]))
+
+    shown = [r for r, _ in sched]
+    if any(r["stem"] for r in shown):
+        print()
+        print("每题题干（给老师对卷用）:")
+        for r in shown:
+            print("  第 %s 题：%s" % (r["no"], (r["stem"] or "（题库里这题还没录题面）")))
+    nostem = [r for r in shown if not r["stem"]]
+    if nostem:
+        print("  注: 第 %s 题题库里还没录题面，讲之前先看一眼原卷。"
+              % "、".join(r["no"] for r in nostem))
+
+    # ---- 自检：个体题号集合 ⊆ 全班失分题集合 ----
+    class_lost, agg = set(), {}
+    for r in rows:
+        a = agg.setdefault(r["no"], {"got": 0.0, "tot": 0.0})
+        a["got"] += r["got"]
+        a["tot"] += r["full"]
+        if r["full"] and r["got"] < r["full"] - 1e-9:
+            class_lost.add(r["no"])
+    mine_nos = {r["no"] for r in lost}
+    ok = mine_nos <= class_lost
+    print()
+    print("自检 1: 个体题号集合 ⊆ 全班失分题集合 → %s（个体 %d 题 / 全班失分题 %d 题）"
+          % ("通过" if ok else "不通过", len(mine_nos), len(class_lost)))
+    ranked_all = sorted(agg.items(), key=lambda kv: (-(1 - kv[1]["got"] / kv[1]["tot"]) if kv[1]["tot"] else 0,
+                                                     _no_sort_key(kv[0])))
+    top_class = {no for no, _ in ranked_all[:args.top]}
+    inter = sorted(mine_nos & top_class, key=_no_sort_key)
+    print("自检 2（参考，不做断言）: 全班按错误率只讲前 %d 题时，与个体清单重合 %d 题：%s"
+          % (args.top, len(inter), "、".join(inter) or "无"))
+    if not ok:
+        print("★ 自检 1 没过：个体里出现了全班失分题之外题号，先别用这页。")
+        return 3
+
+    doc = {"student": who, "source": os.path.basename(args.scores),
+           "items": [{"no": r["no"], "kp": r["kp"], "full": r["full"], "got": r["got"],
+                      "loss": r["loss"], "minutes": m,
+                      "why": WHY.get(r["err"], WHY_DEFAULT).format(kp=r["kp"])}
+                     for r, m in sched],
+           "rest": [{"no": r["no"], "kp": r["kp"], "loss": r["loss"]} for r in rest],
+           "total_minutes": total_min, "budget": args.budget,
+           "subset_check": ok}
+    fname = "个体讲评_%s.json" % re.sub(r'[\\/:*?"<>|]+', "_", who)
+    path = jdump(doc, os.path.join(out_dir(), fname))
+    print()
+    print("清单元数据: %s (%d 字节)" % (path, os.path.getsize(path)))
+    return 0
+
+
+# ============================================================ 集体补漏（按知识点聚合失分）
+GAP_RULE = "集体讲的门槛：该知识点错误率 ≥ 40% 且失分的同学 ≥ 3 人（规则，不是因果结论）"
+
+
+def _gaps_unavailable(args):
+    print("=" * 78)
+    print("集体补漏清单（按知识点聚合失分）")
+    print("=" * 78)
+    xlsx = getattr(args, "xlsx", None)
+    _say_missing_scores(xlsx, [
+        "没有逐题得分，就不知道哪个知识点集体塌了，补漏清单不出。",
+        SCORES_NEED,
+        "拿到之后这样跑：python teaching.py gaps --scores 第1次月考_逐题得分.csv",
+    ])
+    return 0
+
+
+def cmd_gaps(args):
+    paths = getattr(args, "scores", None) or []
+    if isinstance(paths, str):
+        paths = [paths]
+    paths = [p for p in paths if str(p).strip()]
+    if not paths:
+        return _gaps_unavailable(args)
+
+    print("=" * 78)
+    print("集体补漏清单（按知识点聚合失分）")
+    print("=" * 78)
+    bank = load_bank(getattr(args, "bank", None))
+    if bank["err"]:
+        print(bank["err"])
+        print("题库读不到，知识点名补不上；仍按逐题得分表里的「知识点」列聚合。")
+
+    rows, labels, warns = [], [], []
+    for p in paths:
+        try:
+            part, wide, warn = _parse_scores(p, bank)
+        except ScoresError as e:
+            print("--scores %s 这份表用不了：" % os.path.basename(p))
+            for line in str(e).splitlines():
+                print("  " + line)
+            return 2
+        rows.extend(part)
+        labels.append("%s（%s ｜ %d 行 / %d 人）" % (os.path.basename(p), "宽表" if wide else "长表",
+                                                   len(part), len({r["stu"] for r in part})))
+        warns.extend(warn)
+    for lab in labels:
+        print("  读入: %s" % lab)
+    for w in warns[:6]:
+        print("  ! %s" % w)
+
+    bank_nos = {str(it.get("no")) for it in (bank.get("items") or [])}
+    unmatched = sorted({r["no"] for r in rows} - bank_nos, key=_no_sort_key) if bank_nos else []
+    students = {r["stu"] for r in rows}
+
+    g = {}
+    for r in rows:
+        kp = str(r.get("kp") or "").strip() or "未标注"
+        a = g.setdefault(kp, {"kp": kp, "full": 0.0, "got": 0.0, "n": 0, "nos": set(),
+                              "studs": set(), "lost_studs": set(), "loss": 0.0})
+        a["full"] += r["full"]
+        a["got"] += r["got"]
+        a["n"] += 1
+        a["loss"] += r["full"] - r["got"]
+        a["nos"].add(r["no"])
+        a["studs"].add(r["stu"])
+        if r["full"] and r["got"] < r["full"] - 1e-9:
+            a["lost_studs"].add(r["stu"])
+
+    if not g:
+        print()
+        print("逐题得分读进来了，但按知识点聚合出来是空的（表里的知识点列全空？）。补漏清单不出。")
+        return 0
+
+    def rate_of(a):
+        return (1.0 - a["got"] / a["full"]) if a["full"] else 0.0
+
+    ranked = sorted(g.values(), key=lambda a: (-a["loss"], -rate_of(a), a["kp"]))
+    print()
+    print("共 %d 人 ｜ %d 道题 ｜ %d 个知识点 ｜ 失分合计 %g"
+          % (len(students), len({r["no"] for r in rows}), len(g), sum(a["loss"] for a in g.values())))
+    print(GAP_RULE)
+    if unmatched:
+        print("题库里对不上：%s" % "、".join(unmatched))
+    print()
+    print("%-3s %-20s %-5s %-13s %-10s %-8s %s"
+          % ("#", "知识点", "题数", "涉及人数", "失分总分", "错误率", "判定"))
+    print("-" * 78)
+    for i, a in enumerate(ranked, 1):
+        hit = rate_of(a) >= 0.40 and len(a["lost_studs"]) >= 3
+        print("%-3d %-20s %-5d %-13s %-10g %-8s %s"
+              % (i, a["kp"], len(a["nos"]),
+                 "%d / %d" % (len(a["lost_studs"]), len(a["studs"])),
+                 a["loss"], "%.1f%%" % (rate_of(a) * 100),
+                 "建议集体讲" if hit else "个别人补"))
+    print("-" * 78)
+    need = [a for a in ranked if rate_of(a) >= 0.40 and len(a["lost_studs"]) >= 3]
+    if need:
+        print("先讲这三个（按失分从多到少）: %s"
+              % " / ".join("%s（失分 %g，%d 人）" % (a["kp"], a["loss"], len(a["lost_studs"]))
+                           for a in need[:3]))
+    else:
+        print("没有达到「集体讲」门槛的知识点：失分是散的，按人补更划算。")
+    print("口径: 错误率 = 1 − 该知识点得分合计/满分合计；涉及人数 = 该知识点至少错一题的人数；"
+          "只用逐题得分，不做任何总分估算。")
+
+    doc = {"source": labels, "n_students": len(students),
+           "rule": GAP_RULE, "unmatched": unmatched,
+           "items": [{"kp": a["kp"], "n_items": len(a["nos"]), "loss": round(a["loss"], 3),
+                      "rate": round(rate_of(a), 4), "lost_students": len(a["lost_studs"]),
+                      "students": len(a["studs"]),
+                      "nos": sorted(a["nos"], key=_no_sort_key)}
+                     for a in ranked]}
+    path = jdump(doc, os.path.join(out_dir(), "集体补漏清单.json"))
+    print()
     print("清单文件: %s (%d 字节)" % (path, os.path.getsize(path)))
     return 0
 
@@ -1063,8 +1416,8 @@ def _no_label(no):
     return s.strip()
 
 
-def load_scores_table(path, bank=None):
-    """标准逐题得分表 -> 每题错误率。
+def _parse_scores(path, bank=None):
+    """标准逐题得分表 -> 逐行原始记录 parsed=[{stu,no,kp,full,got}] + wide + warn。
 
     认三种（与 insight.py 一致）：
       1) 学生,题号,知识点,满分,得分   2) 学生,题号,得分（知识点/满分从题库补）
@@ -1165,6 +1518,18 @@ def load_scores_table(path, bank=None):
         lines.append("（insight.py 的做法是按满分封顶继续算；review2 这版按任务书要求直接拦下。也可以先用 --rates 手给错误率。）")
         raise ScoresError("\n".join(lines))
 
+    return parsed, wide, warn
+
+
+def load_scores_table(path, bank=None):
+    """标准逐题得分表 -> 每题错误率。
+
+    口径：全班得分合计 / 满分合计（和 --db 同一条算式，同一份数据得同一串数）。
+    读不动抛 ScoresError（中文一句话），调用方负责变成提示，不是栈。
+    """
+    parsed, wide, warn = _parse_scores(path, bank)
+    bank = bank if bank is not None else load_bank(None)
+    bank_nos = {str(it.get("no")) for it in (bank.get("items") or [])}
     by_no = {}
     for p in parsed:
         b = by_no.setdefault(p["no"], {"n": 0, "got": 0.0, "tot": 0.0, "full": 0.0, "n_right": 0})
@@ -1219,13 +1584,14 @@ def ask_text(it):
     return s
 
 
-def plan_schedule(ranked, budget=40, lo=3, hi=8, max_n=5):
-    """从错误率最高的往下装，装到这节课装不下为止。返回 (能讲的, 剩下的)。"""
+def plan_schedule(ranked, budget=40, lo=3, hi=8, max_n=5, key="rate"):
+    """从排头往下装，装到这节课装不下为止。返回 (能讲的, 剩下的)。
+    key: 时长按哪个字段分配（全班版按 rate，个体版按 loss）。"""
     n = 0
     mins = []
     limit = max(1, min(int(max_n), len(ranked)))
     for k in range(1, limit + 1):
-        cand = alloc_minutes(ranked[:k], budget=budget, lo=lo, hi=hi, key="rate")
+        cand = alloc_minutes(ranked[:k], budget=budget, lo=lo, hi=hi, key=key)
         if sum(cand) <= budget:
             n, mins = k, cand
         else:
@@ -1738,6 +2104,13 @@ def build_parser():
                     ("print", "打印中心（3 个 HTML）"), ("all", "依次跑 tree/layer/review/print")):
         sp = sub.add_parser(name, help=h)
         _common(sp, suppress=True)
+        if name == "review":
+            sp.add_argument("--student", default=None, help="切出个体版：只看这名学生该讲哪几题")
+            sp.add_argument("--scores", default=None,
+                            help="逐题得分表（学生,题号,知识点,满分,得分）；个体版必需")
+            sp.add_argument("--xlsx", default=None,
+                            help="真实成绩单；没有逐题得分时用它给出明确说明")
+            sp.add_argument("--bank", default=None)
     i = sub.add_parser("import", help="答题卡导入 + 讲评 + 分层")
     _common(i, suppress=True)
     i.add_argument("--csv", required=True)
@@ -1753,6 +2126,11 @@ def build_parser():
     _common(pl, suppress=True)
     pl.add_argument("--kp", required=True, help="本课要讲的知识点")
     pl.add_argument("--bank", default=None)
+    gp = sub.add_parser("gaps", help="集体补漏清单：按知识点聚合失分（吃逐题得分）")
+    _common(gp, suppress=True)
+    gp.add_argument("--scores", nargs="+", default=None, help="一份或多份逐题得分表")
+    gp.add_argument("--xlsx", default=None, help="真实成绩单；没有逐题得分时用它给出明确说明")
+    gp.add_argument("--bank", default=None)
     l3 = sub.add_parser("layers3", help="#28 分层作业三套（A/B/C）")
     _common(l3, suppress=True)
     l3.add_argument("--kp", default=None, help="限定知识点；不给就覆盖全题库")
@@ -1776,7 +2154,7 @@ def main(argv=None):
     return {"tree": cmd_tree, "layer": cmd_layer, "review": cmd_review,
             "print": cmd_print, "all": cmd_all,
             "review2": cmd_review2, "prelesson": cmd_prelesson,
-            "layers3": cmd_layers3}[args.cmd](args)
+            "layers3": cmd_layers3, "gaps": cmd_gaps}[args.cmd](args)
 
 
 if __name__ == "__main__":

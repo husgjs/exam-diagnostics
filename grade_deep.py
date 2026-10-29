@@ -28,9 +28,51 @@ def hs(ws, n):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.freeze_panes = "A2"
 
+def individual_mode(path, rows, min_group):
+    """有效人数 < min_group：只出个体数据，不出任何群体口径。
+
+    标准分、z 分数、临界生、偏科判断全部依赖群体分布（均分/标准差），
+    一对一或小班里这些量没有意义，硬算就是编。
+    """
+    out = os.path.splitext(path)[0] + "_学情分析.xlsx"
+    declare = "样本 %d 人，以下为个体数据，不作群体结论" % len(rows)
+    print()
+    print("== 小样本模式 ==")
+    print("   %s" % declare)
+    print("   有效人数 %d < 群组下限 %d：不出群体统计（均分/标准差/差异幅度/临界生/z 分数），"
+          "也不做任何班级之间的对比。" % (len(rows), min_group))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "个体数据"
+    ws["A1"] = declare
+    ws["A1"].font = Font(bold=True, size=13, color="C00000")
+    ws["A2"] = ("有效人数 %d < 群组下限 %d：这几个人凑不出群体口径，所以只列原始分数与得分率。"
+                "需要群体统计请补足人数，或用 --min-group 调整下限。" % (len(rows), min_group))
+    hdr = (["班级", "姓名"] + [s for s, _ in SUBS] + ["总分"] +
+           ["%s得分率" % s for s, _ in SUBS] + ["总分得分率"])
+    ws.append([])
+    ws.append(hdr)
+    for c in range(1, len(hdr) + 1):
+        cell = ws.cell(row=3, column=c)
+        cell.fill = HEAD_FILL; cell.font = HEAD_FONT
+        cell.alignment = Alignment(horizontal="center")
+    full_total = sum(F for _, F in SUBS)
+    for d in sorted(rows, key=lambda x: -(x["total"] or 0)):
+        rates = [("%.0f%%" % (100.0 * d[s] / F)) if d.get(s) is not None else "" for s, F in SUBS]
+        ws.append([d["cls"], d["name"]] + [d.get(s) if d.get(s) is not None else "" for s, _ in SUBS] +
+                  [d["total"]] + rates + ["%.0f%%" % (100.0 * d["total"] / full_total)])
+    for i, w in enumerate([11, 10] + [9] * len(SUBS) * 2 + [10, 11], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    wb.save(out)
+    print("   个体数据已写入: %s（sheet：个体数据）" % out)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file")
+    ap.add_argument("--min-group", dest="min_group", type=int, default=3,
+                    help="群组下限：有效人数（剔除总分 0）低于它就不出群体结论，只出个体数据（默认 3）")
     ap.add_argument("--line", type=float, default=500, help="重点线，默认 500")
     ap.add_argument("--band", type=float, default=40, help="临界带宽度，默认线下40分")
     a = ap.parse_args()
@@ -68,6 +110,9 @@ def main():
     N = len(rows)
     if N == 0:
         raise SystemExit("表里没有有效学生数据：请检查「姓名」和「总分」列")
+    if N < a.min_group:
+        # 一对一 / 小班：不出群体口径，只出个体数据（口径不放宽：样本不足就说不足）
+        return individual_mode(a.file, rows, a.min_group)
     if N < 2:
         raise SystemExit("只有 1 名学生，做不了分布分析（至少需要 2 人）")
     FULL = sum(F for _, F in SUBS)

@@ -42,9 +42,55 @@ def cls_order(name):
     m = re.search(r"(\d+)", str(name))
     return int(m.group(1)) if m else 99
 
+def individual_mode(path, rows, subjects, full_map, zeros, min_group):
+    """有效人数 < min_group：只出个体数据，不出任何年级/班级群体口径。
+
+    一对一、小班里「均分/及格率/年级对比/分布」描述的是这个组，样本不够时算出来是误导。
+    """
+    out = os.path.splitext(path)[0] + "_分析.xlsx"
+    declare = "样本 %d 人，以下为个体数据，不作群体结论" % len(rows)
+    print()
+    print("== 小样本模式 ==")
+    print("   %s" % declare)
+    print("   有效人数 %d < 群组下限 %d：不出群体统计，也不做任何班级/年级之间的对比。"
+          % (len(rows), min_group))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "个体数据"
+    ws["A1"] = declare
+    ws["A1"].font = Font(bold=True, size=13, color="C00000")
+    ws["A2"] = ("有效人数 %d < 群组下限 %d：这几个人凑不出群体口径，所以只列原始分数与得分率。"
+                "需要群体统计请补足人数，或用 --min-group 调整下限。" % (len(rows), min_group))
+    hdr = (["班级", "姓名"] + subjects + ["总分"] +
+           ["%s得分率" % s for s in subjects] + ["总分得分率"])
+    ws.append([])
+    ws.append(hdr)
+    for c in range(1, len(hdr) + 1):
+        cell = ws.cell(row=3, column=c)
+        cell.fill = HEAD_FILL; cell.font = HEAD_FONT
+        cell.alignment = Alignment(horizontal="center")
+    full_total = sum(full_map.get(s, 100) for s in subjects)
+    for r in sorted(rows, key=lambda x: -(x["total"] or 0)):
+        scores = [r["subj"].get(s, "") for s in subjects]
+        rates = [("%.0f%%" % (100.0 * r["subj"][s] / full_map.get(s, 100)))
+                 if s in r["subj"] else "" for s in subjects]
+        ws.append([r["cls"], r["name"]] + scores + [r["total"]] + rates +
+                  ["%.0f%%" % (100.0 * (r["total"] or 0) / full_total)])
+    for d in zeros:                       # 缺考的照样列出来，不假装没这个学生
+        ws.append([d["cls"], d["name"]] + ["缺"] * len(subjects) + ["缺考"] +
+                  [""] * len(subjects) + [""])
+    for i, w in enumerate([11, 10] + [9] * len(subjects) * 2 + [10, 11], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    wb.save(out)
+    print("   个体数据已写入: %s（sheet：个体数据）" % out)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file")
+    ap.add_argument("--min-group", dest="min_group", type=int, default=3,
+                    help="群组下限：有效人数（剔除总分 0）低于它就不出群体结论，只出个体数据（默认 3）")
     ap.add_argument("--full", nargs="*", default=[],
                     help="各科满分，如 数学=150 语文=100")
     a = ap.parse_args()
@@ -105,6 +151,9 @@ def main():
     print("学生 %d 人" % len(rows))
     if not rows:
         raise SystemExit("表里没有有效学生数据：请检查「姓名」列是否填了、总分列是否存在")
+    if len(rows) < a.min_group:
+        # 一对一 / 小班：不出群体口径，只出个体数据（口径不放宽：样本不足就说不足）
+        return individual_mode(a.file, rows, [s for _, s in ci_subj], full_map, _zeros, a.min_group)
     if len(rows) < 2:
         raise SystemExit("只有 1 名学生的数据，做不了班级/年级分析（至少需要 2 人）")
 

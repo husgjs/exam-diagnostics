@@ -58,7 +58,76 @@ def stat_of(vals, F, PL, GL):
             "pass": sum(1 for v in vals if v >= PL), "pass_rate": 100.0 * sum(1 for v in vals if v >= PL) / n,
             "good": sum(1 for v in vals if v >= GL), "good_rate": 100.0 * sum(1 for v in vals if v >= GL) / n}
 
-def analyze(path, full=None, passline=None, goodline=None):
+def individual_mode(path, rows, cols, head, mode, F, n_valid, min_group):
+    """有效人数 < min_group：不出任何群体结论，只出个体数据（原始分 + 各科得分率）。
+
+    一对一 / 小班时，均分、及格率、优秀率、分数段这些指标描述的是「这个组」，样本都不够，
+    算出来就是误导：1 个人也有 100% 及格率，3 个人也能算出一段「分布」。
+
+    已验证：真实成绩单是「每次模式」（列名是 语文分数/数学分数…），本分支在真实数据上实测过
+    2 人、1 人两种情况（产物含「个体数据 / 个体得分率」两个 sheet）。
+    **未验证：每题模式（列名是 1,2,3…）下的小样本分支没有真实每题表可测**，只做过代码路径检查；
+    没有为了点亮它去造数据。要覆盖这条路径，得先有一张真实的逐题得分表。
+    """
+    out = os.path.splitext(path)[0] + "_统计.xlsx"
+    declare = "样本 %d 人，以下为个体数据，不作群体结论" % n_valid
+    print()
+    print("== 小样本模式 ==")
+    print("   %s" % declare)
+    print("   有效人数 %d < 群组下限 %d：不出群体统计（均分、及格率、优秀率、分数段）。"
+          % (n_valid, min_group))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "个体数据"
+    ws["A1"] = declare
+    ws["A1"].font = Font(bold=True, size=13, color="C00000")
+    ws["A2"] = ("有效人数 %d < 群组下限 %d：一个组凑不出群体口径，所以这里只列原始分数。"
+                "需要群体统计请补足人数，或用 --min-group 调整下限。" % (n_valid, min_group))
+    hdr = ["学号", "姓名"] + [head[i] for i in cols] + (["总分"] if mode == "每题" else ["平均分"])
+    ws.append([])
+    ws.append(hdr)
+    for c in range(1, len(hdr) + 1):
+        cell = ws.cell(row=3, column=c)
+        cell.fill = HEAD_FILL; cell.font = HEAD_FONT
+        cell.alignment = Alignment(horizontal="center")
+    for st in rows:
+        with_scores = [st["sc"].get(head[i], "") for i in cols]
+        if mode == "每题":
+            tail = sum(st["sc"].values())
+        else:
+            vs = list(st["sc"].values())
+            tail = round(sum(vs) / len(vs), 1) if vs else ""
+        ws.append([st["id"], st["name"]] + with_scores + [tail])
+    for i, w in enumerate([10, 10] + [8] * len(cols) + [10], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws2 = wb.create_sheet("个体得分率")
+    ws2["A1"] = declare
+    ws2["A1"].font = Font(bold=True, size=13, color="C00000")
+    ws2["A2"] = "得分率 = 该栏得分 ÷ 满分（%.0f）" % F
+    hdr2 = ["学号", "姓名"] + ["%s得分率" % head[i] for i in cols] + ["平均得分率"]
+    ws2.append([])
+    ws2.append(hdr2)
+    for c in range(1, len(hdr2) + 1):
+        cell = ws2.cell(row=3, column=c)
+        cell.fill = HEAD_FILL; cell.font = HEAD_FONT
+        cell.alignment = Alignment(horizontal="center")
+    for st in rows:
+        rates = []
+        for i in cols:
+            v = st["sc"].get(head[i])
+            rates.append("" if v is None else "%.0f%%" % (100.0 * v / F))
+        got = [st["sc"][head[i]] for i in cols if head[i] in st["sc"]]
+        avg_rate = "%.0f%%" % (100.0 * sum(got) / (F * len(got))) if got else ""
+        ws2.append([st["id"], st["name"]] + rates + [avg_rate])
+    for i, w in enumerate([10, 10] + [12] * len(cols) + [12], 1):
+        ws2.column_dimensions[get_column_letter(i)].width = w
+    wb.save(out)
+    print("   个体数据已写入: %s（sheet：个体数据 / 个体得分率）" % out)
+    return out
+
+
+def analyze(path, full=None, passline=None, goodline=None, min_group=3):
     ws = load_workbook(path, data_only=True).active
     hrow, head = find_header(ws)
     if not hrow: raise SystemExit("没找到表头：需要有「学号」或「姓名」这一列")
@@ -94,6 +163,10 @@ def analyze(path, full=None, passline=None, goodline=None):
                                                    head[name_col] if name_col is not None else "无"))
     print("数据列 %d 个 ｜ 判定【%s】｜ 满分 %.0f ｜ 及格 %.0f ｜ 优秀 %.0f" % (len(cols), mode, F, PL, GL))
     print("学生 %d 人" % len(rows))
+
+    n_valid = sum(1 for st in rows if st["sc"] and sum(st["sc"].values()) > 0)
+    if n_valid < min_group:
+        return individual_mode(path, rows, cols, head, mode, F, n_valid, min_group)
 
     out = os.path.splitext(path)[0] + "_统计.xlsx"
     wb = Workbook()
@@ -236,8 +309,9 @@ if __name__ == "__main__":
         if a == "--full": kw["full"] = float(sys.argv[i + 1])
         if a == "--pass": kw["passline"] = float(sys.argv[i + 1])
         if a == "--good": kw["goodline"] = float(sys.argv[i + 1])
+        if a == "--min-group": kw["min_group"] = int(sys.argv[i + 1])
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args:
-        print("用法: python teacher_stats.py 成绩表.xlsx [--full 120] [--pass 72] [--good 102]")
+        print("用法: python teacher_stats.py 成绩表.xlsx [--full 120] [--pass 72] [--good 102] [--min-group 3]")
         sys.exit(0)
     analyze(args[0], **kw)

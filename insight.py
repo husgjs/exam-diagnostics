@@ -36,6 +36,7 @@ except Exception:
     pass
 
 import openpyxl
+import ingest
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -295,31 +296,47 @@ def load_grades(path):
     """
     if not os.path.exists(path):
         raise InsightError("找不到成绩单：%s" % path)
-    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
-    ws, head = None, None
-    for cand in wb.worksheets:
-        rows = list(cand.iter_rows(max_row=1, values_only=True))
-        if not rows:
+    # 读表走 ingest：多 sheet、表头容错（不只第一行）、合并单元格填满。
+    # 只有「姓名 + 总分」都在的 sheet 才算成绩表；各 sheet 列布局必须一致，否则跳过并记一笔。
+    rows_all, hdr, layout, notes = [], None, None, []
+    for sheet in ingest.list_sheets(path):
+        try:
+            rows = ingest.sheet_rows(path, sheet)
+        except Exception:
             continue
-        h = [str(c).strip() for c in rows[0] if c is not None]
-        if "姓名" in h and "总分" in h:
-            ws, head = cand, h
-            break
-    if ws is None:
-        wb.close()
+        hi, h = ingest.find_header(rows)
+        if h is None:
+            continue
+        cmap = ingest.canon(h)
+        if cmap.get("name") is None or cmap.get("total") is None:
+            continue
+        if layout is None:
+            layout = cmap
+            hdr = [("" if c is None else str(c).strip()) for c in h]
+        elif cmap != layout:
+            notes.append("跳过 sheet「%s」：列布局与前一个成绩表不同" % sheet)
+            continue
+        rows_all.extend(rows[hi + 1:])
+    if layout is None:
         raise InsightError("这份表里没有同时含「姓名」「总分」表头的 sheet：%s" % path)
 
-    hdr = [("" if c is None else str(c).strip()) for c in next(ws.iter_rows(max_row=1, values_only=True))]
-    c_name = col_of(hdr, "姓名")
-    c_cls = col_of(hdr, "班级")
-    c_total = col_of(hdr, "总分")            # 精确匹配优先：不会误取「小总分」
+    def _col(key, *names):
+        i = col_of(hdr, *names)
+        if i is None or i < 0:
+            i = layout.get(key, -1)
+        return i if i is not None else -1
+
+    c_name = _col("name", "姓名")
+    c_cls = _col("cls", "班级")
+    c_total = _col("total", "总分")          # 精确匹配优先：不会误取「小总分」
     subj_cols = [(h, i) for i, h in enumerate(hdr)
                  if i not in (c_name, c_cls, c_total) and is_subject_col(h)]
 
     qc = qc_report()
+    qc["notes"].extend(notes)
     students, warn = [], []
     idx = 0
-    for r in ws.iter_rows(min_row=2, values_only=True):
+    for r in rows_all:
         idx += 1
         qc["rows_in"] += 1
         if not any(c is not None and str(c).strip() for c in r):
@@ -345,7 +362,6 @@ def load_grades(path):
         zero_sub = [h for h, v in subs.items() if v is not None and v <= 0]
         students.append({"name": name, "cls": cls, "total": total, "subs": subs,
                          "zero_sub": zero_sub})
-    wb.close()
     qc["rows_ok"] = len(students)
     qc["warn"] = warn
     qc["zero_sub_n"] = sum(1 for s in students if s["zero_sub"])

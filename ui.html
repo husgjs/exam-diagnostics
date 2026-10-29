@@ -53,6 +53,12 @@ h1,h2,h3{margin:0}
 .tips li{position:relative;padding-left:22px;font-size:13.5px;color:var(--ink2)}
 .tips li::before{content:"";position:absolute;left:4px;top:10px;width:6px;height:6px;border-radius:50%;background:#c3cfdd}
 .tips strong{color:var(--ink)}
+.params{display:flex;flex-wrap:wrap;gap:14px 22px;margin:18px 0 0;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;align-items:flex-end}
+.params label{display:grid;gap:5px;font-size:13px;color:var(--ink2)}
+.params input{width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:15px;color:var(--ink);background:#fff}
+.params input:focus{outline:none;border-color:var(--main);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.params-hint{flex:1 1 260px;margin:0;font-size:12.5px;color:var(--mute);line-height:1.6}
+.params-hint strong{color:var(--ink2)}
 
 /* ---------- ② 运行中 ---------- */
 .file-chip{font-weight:400;font-size:13.5px;color:var(--ink2);background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px;margin-left:6px;word-break:break-all;display:inline-block;vertical-align:2px}
@@ -192,6 +198,17 @@ h1,h2,h3{margin:0}
       <input type="file" id="file" accept=".xlsx" hidden>
     </div>
     <p class="privacy"><span class="lock" aria-hidden="true"></span>数据只留在你这台电脑上，不上传任何服务器。</p>
+    <div class="params">
+      <label>目标重点线（分）
+        <input type="number" id="line-num" min="0" max="2000" step="1" value="500"
+               inputmode="numeric" aria-describedby="params-hint">
+      </label>
+      <label>临界带（线上下多少分）
+        <input type="number" id="band-num" min="0" max="300" step="1" value="40"
+               inputmode="numeric" aria-describedby="params-hint">
+      </label>
+      <p class="params-hint" id="params-hint">默认按<strong>重点线 500 分、临界带 40 分</strong>挑「临界生」（<strong>线下 40 分内、线上 10 分内</strong>：还没到线但差得不多、或刚过线随时会滑下去的那批）。满分不是 600 的卷子、或本区重点线不是 500 的，改这两个数再分析 —— <strong>只影响这一次</strong>，首页的临界生人数和明细表的名单都跟着变。</p>
+    </div>
     <ul class="tips">
       <li>表格里最好有<strong>学号、姓名、分数</strong>这几列；列名叫「总分」「成绩」「得分」都能认出来。</li>
       <li>一次分析一份：月考、周测、平时成绩都能用，班多班少都行。</li>
@@ -283,7 +300,7 @@ h1,h2,h3{margin:0}
   var KPI_HINTS = [
     [/区分度/, "越高越能分出谁会谁不会；低于 0.15 说明这道题白考"],
     [/难度/, "就是得分率，越大说明越多人做对"],
-    [/临界生/, "离分数线差 10 分以内、再使把劲就能上的那批学生"],
+    [/临界生/, "没到重点线、相差在临界带以内的，加上刚过线只超了不到 10 分的，都算随时会滑下去的那批"],
     [/错因/, "把做错的题按原因归了类，看哪类最多"],
     [/率|比例|占比/, "按人数算的比例，100% 就是人人都拿到"]
   ];
@@ -299,6 +316,17 @@ h1,h2,h3{margin:0}
   var S = { job: null, name: "", timer: null, ticker: null, startedAt: 0, tick: 0, knownSteps: 0, miss: 0 };
 
   function $(id) { return document.getElementById(id); }
+
+  /* 目标线/临界带：留空就不发（服务端用默认值）；填了别的就原样发上去，
+     让服务端明确报错，不在前端偷偷换成默认值。 */
+  function numParam(id) {
+    var el = $(id);
+    if (!el) { return undefined; }
+    var raw = (el.value || "").trim();
+    if (!raw) { return undefined; }
+    var n = Number(raw);
+    return isFinite(n) ? n : raw;
+  }
 
   function view(name) {
     var all = ["upload", "run", "result", "error"];
@@ -474,7 +502,7 @@ h1,h2,h3{margin:0}
       return ask(URLS.run, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job: S.job })
+        body: JSON.stringify({ job: S.job, line: numParam("line-num"), band: numParam("band-num") })
       });
     }).then(function () {
       poll();

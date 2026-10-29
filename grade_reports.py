@@ -54,6 +54,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime
 
 try:
@@ -188,7 +189,7 @@ def rank_positions(recs, idxs):
     return {i: pos for pos, i in enumerate(order, 1)}
 
 
-def enrich(recs):
+def enrich(recs, min_group=3):
     """补 年级名次 / 班级名次 / 各科得分率 / 最强最弱 / 结论。"""
     totals = [r["总分"] for r in recs]
     grade_rank = rank_positions(recs, range(len(recs)))
@@ -202,6 +203,12 @@ def enrich(recs):
             class_rank[i] = pos
 
     n = len(recs)
+    # 名次是群体口径：全表有效人数 < min_group 时，结论里也不排名次（与明细两列、打印版同一条规则）
+    n_valid = sum(1 for r in recs if r["总分"] > 0)
+    rank_note = None
+    if n_valid < min_group:
+        rank_note = ("样本 %d 人，少于群组下限 %d 人：不排名次，只列分数与强弱科。"
+                     % (n_valid, min_group))
     # 总分 0 = 缺考/未录入。算任何均分之前先剔除，否则几个缺考就能把年级均分拉下去。
     # 口径要和 grade_deep / grade_analysis / grade_tools / teacher_app 一致。
     counted = [r for r in recs if r["总分"] > 0] or recs
@@ -221,7 +228,7 @@ def enrich(recs):
         for sname, _h, full in SUBJECTS:
             r[sname + "_均差"] = round(r[sname] - avg[sname], 1)
             r[sname + "_得分率"] = (r[sname] / full) if full else 0.0
-        r["结论"] = conclusion(r, avg, n)
+        r["结论"] = conclusion(r, avg, n, rank_note)
         if r["总分"] <= 0:
             r["最强科"], r["最弱科"] = "—", "—"      # 缺考的人没有强弱科可言
         else:
@@ -232,7 +239,7 @@ def enrich(recs):
     return avg
 
 
-def conclusion(r, avg, n):
+def conclusion(r, avg, n, rank_note=None):
     """按最强/最弱科自动生成一句结论。"""
     if r["总分"] <= 0:
         return "本次五科均为 0 分，疑似缺考，请核实分数是否已录入；本条按缺考保留，不计入年级均分。"
@@ -240,7 +247,8 @@ def conclusion(r, avg, n):
     best = max(rates, key=lambda k: rates[k])
     worst = min(rates, key=lambda k: rates[k])
     gap = rates[best] - rates[worst]
-    head = "年级第%d名/%d人，班级第%d名/%d人。" % (r["年级名次"], n, r["班级名次"], r["班级人数"])
+    head = rank_note or ("年级第%d名/%d人，班级第%d名/%d人。"
+                         % (r["年级名次"], n, r["班级名次"], r["班级人数"]))
     if gap >= 0.15:
         body = "优势在{0}（得分率{1:.0%}，比年级均分{2:+.1f}分），短板在{3}（{4:.0%}，{5:+.1f}分）。提分优先补{3}，{0}保持。".format(
             best, rates[best], r[best + "_均差"], worst, rates[worst], r[worst + "_均差"])
@@ -267,7 +275,7 @@ DETAIL_COLS = (
 )
 
 
-def build_detail(recs, path):
+def build_detail(recs, path, rank_note=None):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "成绩单明细"
@@ -281,7 +289,9 @@ def build_detail(recs, path):
     for r in recs:
         row = [r["班级"], r["姓名"]]
         row += [r[s[0]] for s in SUBJECTS]
-        row += [r["总分"], r["年级名次"], r["班级名次"]]
+        # 小样本时名次列写说明：n=2 的「年级第 1 名/共 2 人」字面为真但会误导
+        row += [r["总分"], rank_note if rank_note else r["年级名次"],
+                rank_note if rank_note else r["班级名次"]]
         row += [r[s[0] + "_均差"] for s in SUBJECTS]
         row += [r["最强科"], r["最弱科"], r["结论"]]
         ws.append(row)
@@ -308,7 +318,7 @@ def build_detail(recs, path):
     return path, ws.title, len(DETAIL_COLS)
 
 
-def build_print(recs, path):
+def build_print(recs, path, rank_note=None):
     """打印版：每人一个 8 行分块、每页 4 人、A4 竖版、块间显式分页。"""
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -323,9 +333,14 @@ def build_print(recs, path):
         # 0 抬头
         ws.merge_cells(start_row=base, start_column=1, end_row=base, end_column=7)
         t = ws.cell(row=base, column=1)
-        t.value = "%s  %s（%s）   总分 %g   年级第 %d 名/%d 人   班级第 %d 名/%d 人" % (
-            "九年级成绩单", r["姓名"], r["班级"], r["总分"],
-            r["年级名次"], r["年级人数"], r["班级名次"], r["班级人数"])
+        if rank_note:
+            # 小样本：一人一页的结构不动，只把名次换成一句说明
+            t.value = "%s  %s（%s）   总分 %g   %s" % (
+                "九年级成绩单", r["姓名"], r["班级"], r["总分"], rank_note)
+        else:
+            t.value = "%s  %s（%s）   总分 %g   年级第 %d 名/%d 人   班级第 %d 名/%d 人" % (
+                "九年级成绩单", r["姓名"], r["班级"], r["总分"],
+                r["年级名次"], r["年级人数"], r["班级名次"], r["班级人数"])
         t.font = Font(bold=True, size=11)
         t.alignment = Alignment(horizontal="center", vertical="center")
         t.fill = HEAD_FILL
@@ -391,7 +406,10 @@ def cmd_reports(args):
     out = args.out_dir or DEFAULT_OUT
     os.makedirs(out, exist_ok=True)
     recs, meta = load_scores(src)
-    avg = enrich(recs)
+    # 名次是群体口径：明细两列 / 结论 / 打印版首行 统一按这一条降级
+    min_group = getattr(args, "min_group", 3)
+    n_valid = sum(1 for r in recs if (r.get("总分") or 0) > 0)
+    avg = enrich(recs, min_group)
     for r in recs:
         r["__年级均分_总分"] = avg["__年级__"]
         for sname, _h, _f in SUBJECTS:
@@ -399,10 +417,17 @@ def cmd_reports(args):
 
     recs.sort(key=lambda r: (r["年级名次"], r["姓名"]))
 
+    rank_note = print_note = None
+    if n_valid < min_group:
+        rank_note = "—（样本 %d 人，少于群组下限 %d 人，不排名次）" % (n_valid, min_group)
+        print_note = "样本 %d 人，少于群组下限 %d 人，不排名次" % (n_valid, min_group)
+        print("小样本：全表有效人数 %d < 群组下限 %d —— 明细两列名次、结论、打印版首行都不出名次"
+              % (n_valid, min_group))
+
     detail_path = os.path.join(out, "成绩单_批量明细.xlsx")
     print_path = os.path.join(out, "成绩单_打印版_每页4人.xlsx")
-    build_detail(recs, detail_path)
-    p, psheet, prows = build_print(recs, print_path)
+    build_detail(recs, detail_path, rank_note)
+    p, psheet, prows = build_print(recs, print_path, print_note)
 
     print("=" * 78)
     print("【功能 3】成绩单批量生成")
@@ -874,6 +899,355 @@ def cmd_items_compare(args):
 
 
 # --------------------------------------------------------------------------- #
+# 学生趋势（教师侧）：一个学生跨几次考试的表现
+#   读表走 ingest.py（一表多 sheet / 表头不在第一行 / 合并单元格都能吃）；
+#   口径：总分 0 或缺 = 缺考，不进该次统计，趋势在该次断开，不猜不补。
+#   预警只陈述事实（谁、哪一科、从多少到多少），不写因果、不评价老师。
+# --------------------------------------------------------------------------- #
+TREND_DROP_SUBJECT = 15.0        # 单科相邻两次波动 > 15 分算「波动大」
+TREND_STREAK = 2                 # 连续下降几次算「连续下滑」
+MISSING_TOKENS = ("", "缺考", "缺", "免考", "-", "—", "/", "无")
+
+
+def _num(v):
+    """宽严有度：认得出的数字就转，认不出（缺考/横杠/空）就 None，绝不默认 0。"""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    s = str(v).strip().replace(",", "")
+    if s in MISSING_TOKENS:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def read_exams(path):
+    """用 ingest 读一份成绩表 -> (学生列表, 读取报告)。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import ingest                                     # 读表层归 Lead 维护，只调用不改
+
+    raw_recs, report = ingest.read_all_sheets(path)
+    out = []
+    for r in raw_recs:
+        name = str(r.get("name") or "").strip()
+        if not name:
+            continue
+        raw = r.get("raw") or {}
+        subj = {}
+        for sname, hname, _full in SUBJECTS:
+            subj[sname] = _num(raw.get(hname))
+        total = _num(r.get("total"))
+        if total is None:
+            got = [v for v in subj.values() if v is not None]
+            total = sum(got) if got else None
+        out.append({"姓名": name,
+                    "班级": str(r.get("cls") or "").strip() or "未分班",
+                    "总分": total, "各科": subj})
+    return out, report
+
+
+def rank_of(students):
+    """年级名次：只排在这次有分的学生里，按总分降序 + 原表行序打断并列。"""
+    idx = [i for i, s in enumerate(students) if s["总分"] is not None and s["总分"] > 0]
+    idx.sort(key=lambda i: (-students[i]["总分"], i))
+    return {i: pos for pos, i in enumerate(idx, 1)}
+
+
+def cmd_student_trend(args):
+    files = [x for x in (args.files or []) if x]
+    if not files:
+        raise SystemExit("student-trend 至少要给 1 个成绩表：--files A.xlsx [B.xlsx ...]")
+    labels = args.labels or []
+    out_dir = args.out_dir or DEFAULT_OUT
+    os.makedirs(out_dir, exist_ok=True)
+
+    print("=" * 78)
+    print("【学生趋势】一名学生跨几次考试的表现（教师侧 xlsx）")
+    print("=" * 78)
+    if len(files) < 2:
+        print("注意：只给了 %d 份成绩表。单次考试只能出「点」，出不了趋势，" % len(files))
+        print("      下面的增减列会全空，下滑预警也不会命中——这是预期，不是 bug。")
+        print()
+
+    rounds = []
+    for i, path in enumerate(files):
+        if not os.path.exists(path):
+            raise SystemExit("找不到成绩表：%s" % path)
+        students, report = read_exams(path)
+        label = labels[i] if i < len(labels) else os.path.splitext(os.path.basename(path))[0]
+        valid = [s for s in students if s["总分"] is not None and s["总分"] > 0]
+        zeros = [s for s in students if not (s["总分"] is not None and s["总分"] > 0)]
+        ranks = rank_of(students)
+        for j, s in enumerate(students):
+            s["名次"] = ranks.get(j)
+        rounds.append({"name": label, "path": path, "students": students,
+                       "valid": len(valid), "zeros": len(zeros), "report": report})
+        print("  %s %-26s 读到 %d 人，有分 %d 人，缺考/未录 %d 人"
+              % ("①②③④⑤⑥⑦⑧⑨"[i] if i < 9 else str(i + 1), label, len(students), len(valid), len(zeros)))
+        if zeros:
+            print("     数据质检：剔除 %d 人总分 0 或缺（缺考/未录入）：%s"
+                  % (len(zeros), "、".join("%s(%s)" % (s["姓名"], s["班级"]) for s in zeros[:10])
+                     + ("…" if len(zeros) > 10 else "")))
+        skipped = (report or {}).get("skipped") or []
+        if skipped:
+            print("     跳过的 sheet：%s" % "；".join("%s（%s）" % (n, why) for n, why in skipped))
+
+    # 重名检查：按姓名对不齐就明说，不猜
+    dup_all = set()
+    for rd in rounds:
+        cnt = {}
+        for s in rd["students"]:
+            cnt[s["姓名"]] = cnt.get(s["姓名"], 0) + 1
+        dup_all |= {k for k, v in cnt.items() if v > 1}
+    if dup_all:
+        print()
+        print("注意：有重名（%s），已改用「姓名+班级」对齐。" % "、".join(sorted(dup_all)[:6]))
+    keyfn = (lambda s: (s["姓名"], s["班级"])) if dup_all else (lambda s: s["姓名"])
+
+    # 汇总每个学生在各次考试里的表现
+    order, seen = [], set()
+    for rd in rounds:
+        for s in rd["students"]:
+            k = keyfn(s)
+            if k not in seen:
+                seen.add(k)
+                order.append(k)
+    table = {}
+    for k in order:
+        table[k] = {"姓名": k[0] if isinstance(k, tuple) else k,
+                    "班级": "", "points": {}}
+    for i, rd in enumerate(rounds):
+        for s in rd["students"]:
+            k = keyfn(s)
+            rec = table[k]
+            if not rec["班级"]:
+                rec["班级"] = s["班级"]
+            if s["总分"] is not None and s["总分"] > 0:
+                rec["points"][i] = s
+
+    names = sorted({r["姓名"] for r in table.values()})
+    if args.name:
+        want = str(args.name).strip()
+        hit = [k for k in order if table[k]["姓名"] == want]
+        if not hit:
+            raise SystemExit("这几次考试里都找不到学生「%s」。现有名单前 10 个：%s"
+                             % (want, "、".join(names[:10])))
+        order = hit
+
+    # ---------- 写 xlsx ----------
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+    ws.title = "学生趋势"
+    head = ["姓名", "班级"]
+    for rd in rounds:
+        head += ["%s·总分" % rd["name"], "%s·名次（仅教师可见）" % rd["name"], "%s·较上次增减" % rd["name"]]
+    head += ["有分次数", "最近一次较上一次增减", "备注"]
+    ws.append(head)
+
+    for k in order:
+        rec = table[k]
+        row = [rec["姓名"], rec["班级"]]
+        prev = None
+        deltas = []
+        for i, rd in enumerate(rounds):
+            s = rec["points"].get(i)
+            if s is None:
+                row += [None, None, None]
+                prev = None                    # 缺考把相邻比较断开
+                continue
+            d = None if prev is None else round(s["总分"] - prev, 1)
+            row += [s["总分"], s["名次"], d]
+            if d is not None:
+                deltas.append(d)
+            prev = s["总分"]
+        row += [len(rec["points"]), deltas[-1] if deltas else None]
+        if not rec["points"]:
+            row.append("%d 次都缺考/未录入，请核实" % len(rounds))
+        elif len(rec["points"]) < len(rounds):
+            row.append("有 %d 次缺考（缺口不补值）" % (len(rounds) - len(rec["points"])))
+        else:
+            row.append("")
+        ws.append(row)
+
+    for c in range(1, len(head) + 1):
+        cell = ws.cell(row=1, column=c)
+        cell.font = Font(bold=True)
+        cell.fill = HEAD_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.freeze_panes = "C2"
+    ws.auto_filter.ref = "A1:%s%d" % (get_column_letter(len(head)), ws.max_row)
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 12
+    for c in range(3, len(head) + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 15
+
+    # 第二张：各科明细（长表，便于筛选）
+    ws2 = wb.create_sheet("各科明细")
+    head2 = ["姓名", "班级", "考试", "科目", "满分", "分数", "得分率", "较上次同科增减"]
+    ws2.append(head2)
+    for k in order:
+        rec = table[k]
+        for sname, _h, full in SUBJECTS:
+            prev = None
+            for i, rd in enumerate(rounds):
+                s = rec["points"].get(i)
+                if s is None:
+                    prev = None
+                    continue
+                v = (s["各科"] or {}).get(sname)
+                if v is None:
+                    prev = None
+                    continue
+                d = None if prev is None else round(v - prev, 1)
+                prev = v
+                ws2.append([rec["姓名"], rec["班级"], rd["name"], sname, full, v,
+                            (v / full) if full else None, d])
+    for c in range(1, len(head2) + 1):
+        cell = ws2.cell(row=1, column=c)
+        cell.font = Font(bold=True)
+        cell.fill = HEAD_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for r in range(2, ws2.max_row + 1):
+        ws2.cell(row=r, column=7).number_format = "0.0%"
+    ws2.freeze_panes = "A2"
+    ws2.auto_filter.ref = "A1:H%d" % ws2.max_row
+    for col, w in zip("ABCDEFGH", [10, 12, 16, 8, 8, 9, 9, 16]):
+        ws2.column_dimensions[col].width = w
+
+    # 第三张：下滑预警（只陈述事实）
+    ws3 = wb.create_sheet("下滑预警")
+    head3 = ["姓名", "班级", "预警", "事实依据"]
+    ws3.append(head3)
+    warn_rows = []
+    for k in order:
+        rec = table[k]
+        got = [i for i in range(len(rounds)) if i in rec["points"]]
+        if len(got) < 2:
+            continue
+        # 连续下滑：末尾连续下降的次数
+        seq, run, facts = [], 0, []
+        for idx, i in enumerate(got):
+            seq.append((rounds[i]["name"], rec["points"][i]["总分"]))
+            if idx >= 1:
+                prev_i, this_i = got[idx - 1], i
+                # 必须是相邻两次考试，中间缺考就断开
+                if this_i - prev_i != 1:
+                    run = 0
+                    continue
+                if rec["points"][this_i]["总分"] < rec["points"][prev_i]["总分"]:
+                    run += 1
+                else:
+                    run = 0
+        if run >= TREND_STREAK:
+            tail = [x for x in seq][-run - 1:]
+            warn_rows.append([rec["姓名"], rec["班级"], "连续下滑",
+                              "%s：总分连续下降 %d 次（%s）"
+                              % ("→".join(n for n, _v in tail),
+                                 run, " → ".join("%g" % v for _n, v in tail))])
+        # 单科波动大
+        for sname, _h, _full in SUBJECTS:
+            for idx in range(1, len(got)):
+                a, b = got[idx - 1], got[idx]
+                if b - a != 1:
+                    continue
+                va = (rec["points"][a]["各科"] or {}).get(sname)
+                vb = (rec["points"][b]["各科"] or {}).get(sname)
+                if va is None or vb is None:
+                    continue
+                d = vb - va
+                if abs(d) > TREND_DROP_SUBJECT:
+                    warn_rows.append([rec["姓名"], rec["班级"], "单科波动大",
+                                      "%s：%s 从 %g 变到 %g（%+.1f 分，超过 %g 分）"
+                                      % (sname, rounds[a]["name"] + "→" + rounds[b]["name"],
+                                         va, vb, d, TREND_DROP_SUBJECT)])
+    for row in warn_rows:
+        ws3.append(row)
+    for c in range(1, len(head3) + 1):
+        cell = ws3.cell(row=1, column=c)
+        cell.font = Font(bold=True)
+        cell.fill = HEAD_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws3.freeze_panes = "A2"
+    ws3.auto_filter.ref = "A1:D%d" % max(2, ws3.max_row)
+    for col, w in zip("ABCD", [10, 12, 12, 72]):
+        ws3.column_dimensions[col].width = w
+    if not warn_rows:
+        ws3.append(["—", "—", "未命中", "按上面的判定口径，这次没有触发任何预警"])
+
+    # 第四张：口径与局限（把话说在前面）
+    ws4 = wb.create_sheet("口径与局限")
+    lines = [
+        ("统计口径", ""),
+        ("参加考试", "总分 > 0 才算参加了这次考试"),
+        ("缺考/未录", "总分为 0 或空的，不进这次的名次与统计；趋势在该次断开，不补值、不插值"),
+        ("名次", "只排在这次有分的学生里，按总分降序 + 原表行序打断并列（与成绩单口径一致）"),
+        ("名次可见性", "名次只给老师看，学生的成绩单里不出名次以外的内容"),
+        ("得分率", "分数 ÷ 满分；五科满分 语文100 数学150 英语150 物理100 化学100"),
+        ("", ""),
+        ("预警判定（只陈述事实，不做因果推断）", ""),
+        ("连续下滑", "相邻两次考试总分连续下降 ≥ %d 次；中间缺考则该次断开" % TREND_STREAK),
+        ("单科波动大", "同一科目相邻两次考试相差 > %g 分" % TREND_DROP_SUBJECT),
+        ("", ""),
+        ("局限", ""),
+        ("需要几次考试", "趋势结论至少要 2 次真实考试；「连续下滑」至少要 3 次才能触发（2 次最多只有 1 次下降）"),
+        ("本次数据", "本次输入 %d 份成绩表：%s" % (len(rounds), "、".join(r["name"] for r in rounds))),
+        ("未验证的部分", "只有一份真实成绩单时，各次数据相同，趋势恒为 0 —— 这是预期，不代表功能验证过结论"),
+    ]
+    for a, b in lines:
+        ws4.append([a, b])
+    ws4.column_dimensions["A"].width = 26
+    ws4.column_dimensions["B"].width = 88
+
+    suffix = ("_" + str(args.name).strip()) if args.name else ""
+    out = os.path.join(out_dir, "学生趋势%s_%d次_%s.xlsx" % (suffix, len(rounds), time.strftime("%Y%m%d")))
+    wb.save(out)
+
+    # ---------- 控制台 ----------
+    print()
+    print("学生 %d 人；有分次数分布：%s" % (
+        len(order), "、".join("%d 次 %d 人" % (n, c) for n, c in
+                              sorted(_count(len(table[k]["points"]) for k in order).items()))))
+    print()
+    print("── 下滑预警：命中 %d 条%s" % (len(warn_rows), "" if warn_rows else "（本次没触发）"))
+    for row in warn_rows[:8]:
+        print("   ⚑ %s（%s）%s：%s" % (row[0], row[1], row[2], row[3]))
+    if len(warn_rows) > 8:
+        print("   …共 %d 条，完整见 xlsx" % len(warn_rows))
+    if len(rounds) < 3:
+        print("   说明：「连续下滑」需要 %d 次以上考试才可能触发，本次 %d 次，即使下降也最多算 1 次。"
+              % (TREND_STREAK + 1, len(rounds)))
+
+    print()
+    print("── 样例（前 3 人）")
+    show = order[:3]
+    for k in show:
+        rec = table[k]
+        parts = []
+        for i, rd in enumerate(rounds):
+            s = rec["points"].get(i)
+            parts.append("%s %s" % (rd["name"], ("%g" % s["总分"]) if s else "缺考"))
+        print("   %s（%s）：%s" % (rec["姓名"], rec["班级"], " ｜ ".join(parts)))
+
+    print()
+    print("输出: %s" % os.path.abspath(out))
+    print("       sheet：学生趋势 / 各科明细 / 下滑预警 / 口径与局限")
+    return 0
+
+
+def _count(it):
+    d = {}
+    for x in it:
+        d[x] = d.get(x, 0) + 1
+    return d
+
+
+# --------------------------------------------------------------------------- #
 def main(argv=None):
     ap = argparse.ArgumentParser(description="教师侧报告工具：成绩单批量 / 多次考试趋势 / 命题质量档案")
     sub = ap.add_subparsers(dest="cmd")
@@ -881,6 +1255,8 @@ def main(argv=None):
     p1 = sub.add_parser("reports", help="功能3 成绩单批量生成")
     p1.add_argument("--src", default=None, help="成绩表 xlsx（默认 九年级月考成绩单.xlsx）")
     p1.add_argument("--out-dir", default=None, help="输出目录（默认 教师工具/输出）")
+    p1.add_argument("--min-group", dest="min_group", type=int, default=3,
+                    help="群组下限：全表有效人数低于它时「年级名次/班级名次」两列改为说明（默认 3）")
     p1.set_defaults(func=cmd_reports)
 
     p2 = sub.add_parser("trend", help="功能5 多次考试趋势")
@@ -889,6 +1265,13 @@ def main(argv=None):
     p2.add_argument("--out-dir", default=None)
     p2.add_argument("--top", type=int, default=15, help="控制台最多列几行")
     p2.set_defaults(func=cmd_trend)
+
+    p4 = sub.add_parser("student-trend", help="单个学生跨次考试趋势（教师侧）")
+    p4.add_argument("--files", nargs="*", required=True, help="按时间顺序列出的成绩表 xlsx")
+    p4.add_argument("--labels", nargs="*", default=None, help="每次考试的名称，缺省用文件名")
+    p4.add_argument("--name", default=None, help="只看某一名学生")
+    p4.add_argument("--out-dir", default=None, help="输出目录（默认 教师工具/输出）")
+    p4.set_defaults(func=cmd_student_trend)
 
     p3 = sub.add_parser("items", help="功能6 命题质量档案")
     s3 = p3.add_subparsers(dest="sub")

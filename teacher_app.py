@@ -64,7 +64,7 @@ DEFAULT_PORT = 8765
 # 这个进程跑的到底是哪一版代码。验收前先打 /api/ping 对 build，
 # 免得又拿"改之前的进程"测出新问题来（已经栽过两次了）。
 APP_FEATURES = ["source-field", "rc=2-degraded", "port-probe", "absentee-excluded",
-                "score-entry"]
+                "score-entry", "line-band"]
 try:
     with open(os.path.abspath(__file__), "rb") as _fh:
         APP_BUILD = hashlib.md5(_fh.read()).hexdigest()[:10]
@@ -75,6 +75,52 @@ MAX_UPLOAD = 60 * 1024 * 1024
 STEP_TIMEOUT = 300
 LINE_TOTAL = 500          # 重点线，和 grade_deep.py 的默认值一致
 BAND = 40                 # 临界带宽度，和 grade_deep.py 的默认值一致
+
+# 临界带上沿：已过线、但超出不超过 10 分的也算临界（刚过线的人最容易被忽视）。
+# ⚠ 这个上沿必须与 grade_deep.py 里 crit 过滤器的 `< a.line + 10` 保持一致：
+#    那处和这里任意一边改了，另一边必须跟着改，否则首页的临界生人数会和明细表的名单差出一批人
+#    （统一前就是这样：500/40 时首页 70 人、明细 90 人，差的正是 [line, line+10) 这 20 人）。
+CRIT_UP = 10
+
+# /api/run 允许覆盖这两个值。非法值一律报错，绝不静默退回默认值 ——
+# 否则老师以为按 450/30 算了，其实还是 500/40，名单对不上却查不出原因。
+LINE_MIN, LINE_MAX = 0, 2000
+BAND_MIN, BAND_MAX = 0, 300
+JOBS_DIR = os.path.join(HERE, "jobs")
+
+
+def parse_int_param(body, key, default, lo, hi, label):
+    """从请求体取一个整数参数。没传 -> default；传了但不合法 -> (None, 错误说明)。"""
+    raw = body.get(key, None)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return default, None
+    if isinstance(raw, bool):
+        return None, "%s必须是 %d~%d 之间的整数，收到的是「%s」" % (label, lo, hi, raw)
+    try:
+        if isinstance(raw, float):
+            if raw != int(raw):
+                raise ValueError(raw)
+            val = int(raw)
+        elif isinstance(raw, int):
+            val = raw
+        else:
+            val = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None, "%s必须是 %d~%d 之间的整数，收到的是「%s」" % (label, lo, hi, raw)
+    if not (lo <= val <= hi):
+        return None, "%s必须在 %d~%d 之间，收到的是 %d" % (label, lo, hi, val)
+    return val, None
+
+
+def write_job_json(job, line, band):
+    """每次分析落一份任务单：jobs/<job_id>/job.json（口径可回溯，进程重启也不丢）。"""
+    d = os.path.join(JOBS_DIR, job["id"])
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "job.json")
+    payload = {"line": line, "band": band, "src": job["src"], "kind": job["kind"]}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    return path
 
 SUBJECTS = [("语文", "语文分数", 100.0), ("数学", "数学分数", 150.0), ("英语", "英语分数", 150.0),
             ("物理", "物理分数", 100.0), ("化学", "化学分数", 100.0)]
@@ -151,8 +197,14 @@ def detect_kind(path):
     return "card"
 
 
-def compute_cards(path):
-    """首页四张卡片：整体、各班、各科、需要盯的学生。"""
+def compute_cards(path, line=None, band=None):
+    """首页四张卡片：整体、各班、各科、需要盯的学生。
+
+    line/band 跟着本次分析走：页面上的「临界生」数字必须和 grade_deep 那张表同一个口径，
+    否则老师改了口径，明细表变了、首页数字没变，就成了两个数。
+    """
+    line = LINE_TOTAL if line is None else line
+    band = BAND if band is None else band
     wb = openpyxl.load_workbook(path, data_only=True)
     try:
         ws = wb.worksheets[0]
@@ -250,12 +302,13 @@ def compute_cards(path):
                     "这次最低的是%s（%.1f%%），是最该补的一科。" % (weak, subj_rate[weak] * 100),
         })
 
-    edge = [t for t in totals if LINE_TOTAL - BAND <= t < LINE_TOTAL]
+    edge = [t for t in totals if line - band <= t < line + CRIT_UP]
     # 注意：zero 必须从剔除前的原始行里数。totals 已经剔过缺考，
     # 拿它去数 0 分会永远数出 0 人，老师就看不到「有几个人缺考、请核实」这个提醒了。
     zero = len(zeros)
-    note = ("临界生：总分卡在 %d–%d 分之间，再多考几分就能上重点线（%d 分）、少考几分就滑下去的学生。"
-            % (LINE_TOTAL - BAND, LINE_TOTAL, LINE_TOTAL))
+    note = ("临界生：总分从 %d 分到不满 %d 分的都算 —— 没到线但差得不多的，"
+            "和刚过线、只超了不到 %d 分的，都是随时会滑下去的那一批（重点线 %d 分，临界带 %d 分）。"
+            % (line - band, line + CRIT_UP, CRIT_UP, line, band))
     if zero:
         note += ("另有 %d 人总分 0（缺考/未录入），这 %d 人不计入均分与及格率；"
                  "若是漏登分，补录后需重跑。" % (zero, zero))
@@ -279,15 +332,20 @@ class StepFailed(Exception):
     pass
 
 
-def build_steps(src, outdir):
+def build_steps(src, outdir, line=None, band=None):
+    """生成流水线。line/band 不传就用 LINE_TOTAL/BAND（老调用照常能跑）。"""
     py = PYTHON
+    line = LINE_TOTAL if line is None else int(line)
+    band = BAND if band is None else int(band)
+
     def cmd(*args):
         return [py] + list(args)
     return [
         {"name": "读取成绩表", "cmd": None, "side": False},
         {"name": "班级对比", "cmd": cmd("teacher_stats.py", src), "side": False},
         {"name": "学科强弱", "cmd": cmd("grade_analysis.py", src), "side": False},
-        {"name": "需要盯的学生", "cmd": cmd("grade_deep.py", src), "side": True},
+        {"name": "需要盯的学生",
+         "cmd": cmd("grade_deep.py", src, "--line", str(line), "--band", str(band)), "side": True},
         {"name": "分组与工具表", "cmd": cmd("grade_tools.py", src), "side": False},
         {"name": "每人成绩单", "cmd": cmd("grade_reports.py", "reports", "--src", src, "--out-dir", outdir), "side": False},
         {"name": "考试趋势", "cmd": cmd("grade_reports.py", "trend", "--files", src, "--out-dir", outdir), "side": False},
@@ -341,7 +399,7 @@ def run_pipeline(job_id):
         job = JOBS[job_id]
         job["state"] = "running"
     src, outdir = job["src"], job["dir"]
-    steps = build_steps(src, outdir)
+    steps = build_steps(src, outdir, job.get("line"), job.get("band"))
     with LOCK:
         job["steps"] = [{"name": s["name"], "state": "pending", "ms": 0} for s in steps]
     t0 = time.time()
@@ -353,7 +411,7 @@ def run_pipeline(job_id):
                 job["steps"][i]["state"] = "running"
             t1 = time.time()
             if st["name"] == "读取成绩表":
-                cards, warn = compute_cards(src)
+                cards, warn = compute_cards(src, job.get("line"), job.get("band"))
                 if warn:
                     warns.append(("读取成绩表", warn))
                 with LOCK:
@@ -423,6 +481,9 @@ def job_view(job):
         "error": job["error"],
         "warn": job.get("warn", ""),
         "total_ms": job.get("total_ms", 0),
+        "line": job.get("line", LINE_TOTAL),
+        "band": job.get("band", BAND),
+        "job_json": job.get("job_json", ""),
     }
 
 
@@ -908,6 +969,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": job_id, "file": safe_name(fname), "stem": stem, "kind": kind,
                 "src": src, "dir": outdir, "state": "ready", "steps": [], "cards": [],
                 "files": [], "error": "", "warn": "", "total_ms": 0, "created": time.time(),
+                "line": LINE_TOTAL, "band": BAND, "job_json": "",
             }
         self._send(200, {"job": job_id, "file": safe_name(fname), "kind": kind})
 
@@ -917,20 +979,35 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length else {}
         except (ValueError, json.JSONDecodeError):
             return self._err(400, "请求格式不对")
+        if not isinstance(body, dict):
+            return self._err(400, "请求格式不对")
         job_id = body.get("job")
         job = self._get_job(job_id)
         if not job:
             return self._err(404, "没有这个任务")
+        line, err = parse_int_param(body, "line", LINE_TOTAL, LINE_MIN, LINE_MAX, "目标重点线")
+        if err:
+            return self._err(400, err)
+        band, err = parse_int_param(body, "band", BAND, BAND_MIN, BAND_MAX, "临界带宽度")
+        if err:
+            return self._err(400, err)
         with LOCK:
             if job["state"] == "running":
-                return self._send(200, {"job": job_id, "state": "running"})
+                return self._send(200, {"job": job_id, "state": "running",
+                                        "line": job.get("line"), "band": job.get("band")})
             job["state"] = "running"
             job["error"] = ""
             job["cards"] = []
             job["files"] = []
             job["total_ms"] = 0
+            job["line"] = line
+            job["band"] = band
+        job_json = write_job_json(job, line, band)
+        with LOCK:
+            job["job_json"] = job_json
         threading.Thread(target=run_pipeline, args=(job_id,), daemon=True).start()
-        self._send(200, {"job": job_id, "state": "running"})
+        self._send(200, {"job": job_id, "state": "running", "line": line, "band": band,
+                         "job_json": job_json})
 
     # ---------- 题库 ----------
     def _serve_qb(self):
