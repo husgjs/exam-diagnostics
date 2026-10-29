@@ -48,6 +48,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, unquote
 
 import openpyxl
+import caliber
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
@@ -511,6 +512,13 @@ def run_pipeline(job_id):
             elif st.get("action") == "note":
                 pass
             elif st.get("action") == "collect":
+                try:
+                    with LOCK:
+                        _cards = list(job.get("cards") or [])
+                        _warn = job.get("warn") or ""
+                    caliber.build(outdir, _cards, job.get("file") or "", _warn, job_id)
+                except Exception:                            # noqa: BLE001 口径说明写不出不能拦住产物
+                    pass
                 notes = job.get("notes") or []
                 if notes:
                     with open(os.path.join(outdir, "运行说明.txt"), "w", encoding="utf-8") as fh:
