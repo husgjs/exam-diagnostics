@@ -1,6 +1,6 @@
 
 # -*- coding: utf-8 -*-
-"""成绩统计小工具 —— 拖一张 Excel 进来，三十秒出全套统计。
+"""帮老师算成绩的小工具 —— 拖一张 Excel 进来，三十秒出全套统计。
 
 用法：
     python teacher_stats.py 成绩表.xlsx

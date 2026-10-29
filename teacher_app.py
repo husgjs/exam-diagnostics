@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""teacher_app.py — 教师工作台（本地网页版），双击就能用。
+r"""teacher_app.py — 帮老师算成绩的小工具（本地网页版），双击就能用。
 
 老师把成绩表拖进浏览器页面，后台把 教师工具\ 下的分析脚本挨个跑一遍，
 结果按卡片和文件列表吐回页面。
@@ -1420,7 +1420,7 @@ def probe_port(port):
 
 def main(argv=None):
     global UI_FILE
-    ap = argparse.ArgumentParser(description="教师工作台：本地网页版成绩分析（只在本机开放）")
+    ap = argparse.ArgumentParser(description="帮老师算成绩的小工具：本地网页版成绩分析（只在本机开放）")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-open", action="store_true", help="启动后不自动打开浏览器")
     ap.add_argument("--ui", default=UI_FILE, help=argparse.SUPPRESS)

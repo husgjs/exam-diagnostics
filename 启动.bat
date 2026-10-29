@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title 成绩分析工具
+title 帮老师算成绩的小工具
 cd /d "%~dp0"
 echo.
-echo   成绩分析工具 —— 正在启动
+echo   帮老师算成绩的小工具 —— 正在启动
 echo.
 
 set PY=
