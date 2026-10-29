@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>帮老师算成绩的小工具</title>
+<title>教师工作台 · 成绩分析</title>
 <style>
 :root{
   --ink:#1d2733; --ink2:#5a6b7b; --mute:#8494a5; --line:#dfe5ec; --bg:#f4f6f9;
@@ -82,6 +82,7 @@ h1,h2,h3{margin:0}
 /* ---------- ③ 结果页 ---------- */
 .res-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .res-sub{margin:0;font-size:13px;color:var(--ink2)}
+  .note-body{margin:0;padding:12px 14px;background:#f7f8fa;border:1px solid #e3e6ea; border-radius:8px;font-size:12.5px;line-height:1.6;white-space:pre-wrap; word-break:break-word;max-height:420px;overflow:auto;font-family:inherit}
 .cards{margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
 .card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:0 1px 2px rgba(16,34,54,.04)}
 .card h3{font-size:14px;color:var(--ink2);font-weight:600;margin:0 0 10px}
@@ -160,7 +161,7 @@ h1,h2,h3{margin:0}
 </head>
 <body>
 <!--
-  帮老师算成绩的小工具 · 前端模板（单文件，样式和脚本都写在文件里，不引用任何外部资源，断网可用）
+  教师工作台 · 前端模板（单文件，样式和脚本都写在文件里，不引用任何外部资源，断网可用）
   由 teacher_app.py 在访问 / 时原样吐出，不做变量替换。
 
   对接的地址（都是本站的相对路径）：
@@ -177,7 +178,7 @@ h1,h2,h3{margin:0}
     <div class="brand">
       <span class="mark" aria-hidden="true">分</span>
       <div class="brand-txt">
-        <h1>帮老师算成绩的小工具</h1>
+        <h1>教师工作台</h1>
         <p>把成绩单放进来，自动出学情分析</p>
       </div>
     </div>
@@ -189,16 +190,25 @@ h1,h2,h3{margin:0}
 
   <!-- ① 上传页 -->
   <section id="view-upload" class="view is-active" aria-labelledby="up-h">
-    <h2 id="up-h">选一份要分析的成绩单</h2>
+    <h2 id="up-h">拖一份表格进来，选要做的事</h2>
+    <div class="params" id="task-bar">
+      <label>要做哪件事
+        <select id="task-sel"></select>
+      </label>
+      <label id="stu-wrap" hidden>学生姓名
+        <input type="text" id="stu-name" maxlength="20" placeholder="和成绩单里写的一模一样">
+      </label>
+      <p class="params-hint" id="task-hint">读功能表…</p>
+    </div>
     <div id="drop" class="drop" tabindex="0" role="button" aria-labelledby="drop-main" aria-describedby="drop-hint">
       <div class="drop-icon" aria-hidden="true"></div>
       <p class="drop-main" id="drop-main">把成绩单拖到这里</p>
       <p class="drop-alt">或者 <span class="fake-link">点这里选文件</span></p>
-      <p class="drop-hint" id="drop-hint">支持 .xlsx（Excel 另存的表格文件），一次一份</p>
-      <input type="file" id="file" accept=".xlsx" hidden>
+      <p class="drop-hint" id="drop-hint">支持 .xlsx 与 .csv，一次一份</p>
+      <input type="file" id="file" accept=".xlsx,.csv" hidden>
     </div>
     <p class="privacy"><span class="lock" aria-hidden="true"></span>数据只留在你这台电脑上，不上传任何服务器。</p>
-    <div class="params">
+    <div class="params" id="gb-params">
       <label>目标重点线（分）
         <input type="number" id="line-num" min="0" max="2000" step="1" value="500"
                inputmode="numeric" aria-describedby="params-hint">
@@ -236,6 +246,10 @@ h1,h2,h3{margin:0}
     <div class="dl">
       <h3>可以下载的文件</h3>
       <ul id="files" class="files"></ul>
+      <div id="note-box" class="dl" hidden>
+        <h3>这次跑出来的说明（直接看，不用下载）</h3>
+        <pre id="note-body" class="note-body"></pre>
+      </div>
       <div class="actions no-print">
         <a id="zip" class="btn btn-main" href="#">打包下载全部</a>
         <button type="button" id="again" class="btn">再分析一份</button>
@@ -293,7 +307,8 @@ h1,h2,h3{margin:0}
     run: "/api/run",
     job: function (id) { return "/api/job/" + encodeURIComponent(id); },
     file: function (id, name) { return "/api/file/" + encodeURIComponent(id) + "/" + encodeURIComponent(name); },
-    zip: function (id) { return "/api/zip/" + encodeURIComponent(id); }
+    zip: function (id) { return "/api/zip/" + encodeURIComponent(id); },
+    tasks: "/api/tasks"
   };
 
   /* 出现这些词时，后面必须跟一句人话解释（老师不是统计老师） */
@@ -471,14 +486,32 @@ h1,h2,h3{margin:0}
 
   function start(file) {
     if (!file) { return; }
-    if (!/\.xlsx$/i.test(file.name)) {
-      fail("只能分析 .xlsx 表格",
-        "你选的是「" + file.name + "」，这个格式分析程序读不了。",
-        ["在 Excel 里打开它，选「另存为」，文件类型挑「Excel 工作簿（.xlsx）」",
+    var tk = currentTask();
+    var acc = tk.accept || [".xlsx"];
+    var okExt = acc.some(function (e) {
+      return file.name.toLowerCase().slice(-e.length) === e.toLowerCase();
+    });
+    if (!okExt) {
+      fail("这个格式做不了「" + tk.label + "」",
+        "你选的是「" + file.name + "」，这一项只认 " + acc.join(" 或 ") + "。",
+        ["在 Excel 里另存为 .xlsx 再拖进来",
          "如果它是压缩包，先解压，再选里面那个表格"],
         "");
       return;
     }
+    var who = ($("stu-name").value || "").trim();
+    S.student = who;
+    if (tk.need_student) {
+      if (!who) {
+        fail("先填学生姓名",
+          "「" + tk.label + "」要针对一个学生出结果。",
+          ["在上面的「学生姓名」里填上，例如 王浩然",
+           "名字要和成绩单里写的一模一样，别加空格"],
+          "");
+        return;
+      }
+    }
+    S.task = tk.id;
     S.name = file.name;
     S.job = null;
     S.miss = 0;
@@ -502,7 +535,8 @@ h1,h2,h3{margin:0}
       return ask(URLS.run, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job: S.job, line: numParam("line-num"), band: numParam("band-num") })
+        body: JSON.stringify({ job: S.job, task: S.task || "grade", student: S.student || "",
+                                line: numParam("line-num"), band: numParam("band-num") })
       });
     }).then(function () {
       poll();
@@ -720,9 +754,65 @@ h1,h2,h3{margin:0}
     if (S.startedAt) { parts.push("用时 " + secs(Date.now() - S.startedAt)); }
     parts.push("生成 " + files.length + " 个文件");
     $("res-sub").textContent = parts.join(" · ");
+
+    var box = $("note-box");
+    if (box) {
+      box.hidden = true;
+      $("note-body").textContent = "";
+      var hasNote = files.some(function (f) { return f.name === "运行说明.txt"; });
+      if (hasNote) {
+        fetch(URLS.file(S.job, "运行说明.txt")).then(function (r) { return r.text(); })
+          .then(function (txt) {
+            $("note-body").textContent = txt;
+            box.hidden = false;
+          }).catch(function () {});
+      }
+    }
   }
 
   /* ---------- 事件 ---------- */
+  var TASKS = [];
+  function currentTask() {
+    var id = $("task-sel").value;
+    for (var i = 0; i < TASKS.length; i++) { if (TASKS[i].id === id) { return TASKS[i]; } }
+    return TASKS[0] || { id: "grade", label: "全套成绩分析", accept: [".xlsx"], hint: "" };
+  }
+  function syncTask() {
+    var t = currentTask();
+    S.task = t.id;
+    S.needStudent = !!t.need_student;
+    $("task-hint").textContent = t.hint || "";
+    $("stu-wrap").hidden = !(t.need_student || t.optional_student);
+    var acc = (t.accept || [".xlsx"]).join(",");
+    $("file").setAttribute("accept", acc);
+    $("drop-hint").textContent = "支持 " + acc + "，一次一份";
+    var gp = $("gb-params");
+    if (gp) { gp.hidden = (t.id !== "grade"); }
+  }
+  function loadTasks() {
+    if (!$("task-sel")) { return; }
+    ask(URLS.tasks, { method: "GET" }).then(function (r) {
+      TASKS = (r && r.tasks) || [];
+      var sel = $("task-sel");
+      sel.innerHTML = "";
+      TASKS.forEach(function (t) {
+        var o = document.createElement("option");
+        o.value = t.id;
+        o.textContent = t.label;
+        sel.appendChild(o);
+      });
+      syncTask();
+    }).catch(function () {
+      $("task-hint").textContent = "后台版本较旧，只能做全套成绩分析。";
+    });
+  }
+
+  function loadTasksAndBind() {
+    loadTasks();
+    var sel = $("task-sel");
+    if (sel) { sel.addEventListener("change", syncTask); }
+  }
+
   function bind() {
     var drop = $("drop");
     var input = $("file");
@@ -766,6 +856,7 @@ h1,h2,h3{margin:0}
 
     $("again").addEventListener("click", backToUpload);
     $("err-retry").addEventListener("click", backToUpload);
+    loadTasksAndBind();
   }
 
   if (document.readyState === "loading") {

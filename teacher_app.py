@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""teacher_app.py — 帮老师算成绩的小工具（本地网页版），双击就能用。
+r"""teacher_app.py — 教师工作台（本地网页版），双击就能用。
 
 老师把成绩表拖进浏览器页面，后台把 教师工具\ 下的分析脚本挨个跑一遍，
 结果按卡片和文件列表吐回页面。
@@ -64,7 +64,7 @@ DEFAULT_PORT = 8765
 # 这个进程跑的到底是哪一版代码。验收前先打 /api/ping 对 build，
 # 免得又拿"改之前的进程"测出新问题来（已经栽过两次了）。
 APP_FEATURES = ["source-field", "rc=2-degraded", "port-probe", "absentee-excluded",
-                "score-entry", "line-band"]
+                "score-entry", "line-band", "unified-tasks"]
 try:
     with open(os.path.abspath(__file__), "rb") as _fh:
         APP_BUILD = hashlib.md5(_fh.read()).hexdigest()[:10]
@@ -341,7 +341,7 @@ def build_steps(src, outdir, line=None, band=None):
     def cmd(*args):
         return [py] + list(args)
     return [
-        {"name": "读取成绩表", "cmd": None, "side": False},
+        {"name": "读取成绩表", "cmd": None, "side": False, "action": "cards"},
         {"name": "班级对比", "cmd": cmd("teacher_stats.py", src), "side": False},
         {"name": "学科强弱", "cmd": cmd("grade_analysis.py", src), "side": False},
         {"name": "需要盯的学生",
@@ -349,8 +349,73 @@ def build_steps(src, outdir, line=None, band=None):
         {"name": "分组与工具表", "cmd": cmd("grade_tools.py", src), "side": False},
         {"name": "每人成绩单", "cmd": cmd("grade_reports.py", "reports", "--src", src, "--out-dir", outdir), "side": False},
         {"name": "考试趋势", "cmd": cmd("grade_reports.py", "trend", "--files", src, "--out-dir", outdir), "side": False},
-        {"name": "打包文件", "cmd": None, "side": False},
+        {"name": "打包文件", "cmd": None, "side": False, "action": "collect"},
     ]
+
+
+
+
+# ---------------- 任务表：把各个引擎都挂到主页上 ----------------
+# 为什么要有这一张表：
+#   以前主页只会跑「全套成绩分析」，周报、学情卡、薄弱项清单都得回到命令行敲。
+#   老师不会记命令，于是那些功能等于不存在。
+#   这里把每个任务写成一串命令，主页选中就直接跑，产物落在同一个结果区。
+TASKS = [
+    {"id": "grade", "label": "全套成绩分析（七份表）", "accept": [".xlsx"],
+     "hint": "拖一份成绩单，出班级对比、学科诊断、临界生名单、偏科、数据质检等七份表。"},
+    {"id": "weak", "label": "薄弱项清单（集体补漏 + 个体讲评）", "accept": [".csv", ".xlsx"],
+     "optional_student": True,
+     "hint": "拖逐题得分表，按知识点找出该集体讲的地方。学生姓名可以不填；填了就再加他个人该讲哪几题。"},
+    {"id": "weekly", "label": "周作业周报", "accept": [".xlsx"],
+     "hint": "拖周作业登记表，出一人一页周报 + 全班汇总。缺交与未登记分开计。"},
+    {"id": "cards", "label": "学情卡 / 话术卡", "accept": [".xlsx"], "need_student": True,
+     "hint": "拖成绩单并填学生姓名，出一页学情卡；话术卡一起出，家长会上能直接用。"},
+]
+TASK_BY_ID = {t["id"]: t for t in TASKS}
+
+
+def build_task_steps(task, src, outdir, params=None):
+    """某个任务要跑哪几条命令。返回的步骤里 action 决定这一步怎么执行。"""
+    params = params or {}
+    py = PYTHON
+    student = (params.get("student") or "").strip()
+
+    def cmd(*a):
+        return [py] + list(a)
+
+    if task == "weak":
+        steps = [{"name": "读逐题得分表", "cmd": None, "action": "note", "side": False}]
+        steps.append({"name": "集体补漏清单",
+                      "cmd": cmd("teaching.py", "gaps", "--scores", src),
+                      "side": False, "capture": True})
+        if student:
+            steps.append({"name": "个体讲评 · " + student,
+                          "cmd": cmd("teaching.py", "review", "--student", student, "--scores", src),
+                          "side": False, "capture": True})
+        steps.append({"name": "打包文件", "cmd": None, "action": "collect", "side": False})
+        return steps
+
+    if task == "weekly":
+        return [
+            {"name": "读周作业登记表", "cmd": None, "action": "note", "side": False},
+            {"name": "生成周报",
+             "cmd": cmd("weekly.py", "report", "--src", src, "--out-dir", outdir),
+             "side": False, "capture": True},
+            {"name": "打包文件", "cmd": None, "action": "collect", "side": False},
+        ]
+
+    if task == "cards":
+        steps = [{"name": "读成绩单", "cmd": None, "action": "cards", "side": False},
+                 {"name": "学情卡 · " + student,
+                  "cmd": cmd("report_cards.py", "--xlsx", src, "student", "--name", student),
+                  "side": False, "capture": True},
+                 {"name": "话术卡 · " + student,
+                  "cmd": cmd("report_cards.py", "--xlsx", src, "talk", "--name", student),
+                  "side": False, "capture": True},
+                 {"name": "打包文件", "cmd": None, "action": "collect", "side": False}]
+        return steps
+
+    return build_steps(src, outdir, params.get("line"), params.get("band"))
 
 
 RC_OK = 0
@@ -399,7 +464,7 @@ def run_pipeline(job_id):
         job = JOBS[job_id]
         job["state"] = "running"
     src, outdir = job["src"], job["dir"]
-    steps = build_steps(src, outdir, job.get("line"), job.get("band"))
+    steps = job.get("steps_spec") or build_steps(src, outdir, job.get("line"), job.get("band"))
     with LOCK:
         job["steps"] = [{"name": s["name"], "state": "pending", "ms": 0} for s in steps]
     t0 = time.time()
@@ -410,14 +475,20 @@ def run_pipeline(job_id):
             with LOCK:
                 job["steps"][i]["state"] = "running"
             t1 = time.time()
-            if st["name"] == "读取成绩表":
+            if st.get("action") == "cards":
                 cards, warn = compute_cards(src, job.get("line"), job.get("band"))
                 if warn:
                     warns.append(("读取成绩表", warn))
                 with LOCK:
                     job["cards"] = cards
                     job["warn"] = warn
-            elif st["name"] == "打包文件":
+            elif st.get("action") == "note":
+                pass
+            elif st.get("action") == "collect":
+                notes = job.get("notes") or []
+                if notes:
+                    with open(os.path.join(outdir, "运行说明.txt"), "w", encoding="utf-8") as fh:
+                        fh.write("\n\n".join(notes))
                 with LOCK:
                     job["files"] = collect_files(outdir, src)
             else:
@@ -428,6 +499,10 @@ def run_pipeline(job_id):
                 if st["side"] and os.path.exists(side_path):
                     side_bak = open(side_path, "rb").read()
                 _out, note = run_cmd(st["cmd"])
+                if st.get("capture") and _out.strip():
+                    with LOCK:
+                        job.setdefault("notes", []).append(
+                            "===== " + st["name"] + " =====\n" + _out.strip())
                 if note:
                     warns.append((st["name"], note))
                 if side_bak is not None:
@@ -808,6 +883,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_file(path[len("/api/file/"):])
         if path.startswith("/api/zip/"):
             return self._api_zip(path[len("/api/zip/"):])
+        if path == "/api/tasks":
+            return self._send(200, {"tasks": TASKS})
         if path == "/api/ping":
             return self._send(200, {"app": "teacher-workbench",
                                     "port": self.server.server_address[1],
@@ -946,9 +1023,10 @@ class Handler(BaseHTTPRequestHandler):
         if not picked:
             return self._err(400, "没有收到文件（表单字段名要用 file）")
         fname, payload = picked
-        if not fname.lower().endswith(".xlsx"):
-            return self._err(400, "只认 .xlsx 表格，收到的是「%s」" % fname)
-        if not payload.startswith(b"PK"):
+        low = fname.lower()
+        if not (low.endswith(".xlsx") or low.endswith(".csv")):
+            return self._err(400, "只认 .xlsx 或 .csv，收到的是「%s」" % fname)
+        if low.endswith(".xlsx") and not payload.startswith(b"PK"):
             return self._err(400, "这个文件不像 Excel 表格（.xlsx 应该是个压缩包）")
 
         job_id = uuid.uuid4().hex[:12]
@@ -991,6 +1069,19 @@ class Handler(BaseHTTPRequestHandler):
         band, err = parse_int_param(body, "band", BAND, BAND_MIN, BAND_MAX, "临界带宽度")
         if err:
             return self._err(400, err)
+        task = str(body.get("task") or "grade").strip()
+        spec = TASK_BY_ID.get(task)
+        if not spec:
+            return self._err(400, "没有这个任务：%s" % task)
+        student = str(body.get("student") or "").strip()
+        if spec.get("need_student") and not student:
+            return self._err(400, "「%s」要先填学生姓名" % spec["label"])
+        ext = os.path.splitext(job.get("file") or "")[1].lower()
+        if ext and ext not in spec["accept"]:
+            return self._err(400, "「%s」只认 %s，这份是 %s"
+                              % (spec["label"], " / ".join(spec["accept"]), ext))
+        steps_spec = build_task_steps(task, job["src"], job["dir"],
+                                      {"student": student, "line": line, "band": band})
         with LOCK:
             if job["state"] == "running":
                 return self._send(200, {"job": job_id, "state": "running",
@@ -1002,12 +1093,17 @@ class Handler(BaseHTTPRequestHandler):
             job["total_ms"] = 0
             job["line"] = line
             job["band"] = band
+            job["task"] = task
+            job["task_label"] = spec["label"]
+            job["student"] = student
+            job["steps_spec"] = steps_spec
+            job["notes"] = []
         job_json = write_job_json(job, line, band)
         with LOCK:
             job["job_json"] = job_json
         threading.Thread(target=run_pipeline, args=(job_id,), daemon=True).start()
         self._send(200, {"job": job_id, "state": "running", "line": line, "band": band,
-                         "job_json": job_json})
+                         "task": task, "task_label": spec["label"], "job_json": job_json})
 
     # ---------- 题库 ----------
     def _serve_qb(self):
@@ -1420,7 +1516,7 @@ def probe_port(port):
 
 def main(argv=None):
     global UI_FILE
-    ap = argparse.ArgumentParser(description="帮老师算成绩的小工具：本地网页版成绩分析（只在本机开放）")
+    ap = argparse.ArgumentParser(description="教师工作台：本地网页版成绩分析（只在本机开放）")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-open", action="store_true", help="启动后不自动打开浏览器")
     ap.add_argument("--ui", default=UI_FILE, help=argparse.SUPPRESS)
