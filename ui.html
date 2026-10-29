@@ -217,6 +217,9 @@ h1,h2,h3{margin:0}
         <input type="number" id="band-num" min="0" max="300" step="1" value="40"
                inputmode="numeric" aria-describedby="params-hint">
       </label>
+      <label>各科满分（可选，用来查超分）
+        <input type="text" id="full-spec" placeholder="语文=120,数学=150" autocomplete="off">
+      </label>
       <p class="params-hint" id="params-hint">默认按<strong>重点线 500 分、临界带 40 分</strong>挑「临界生」（<strong>线下 40 分内、线上 10 分内</strong>：还没到线但差得不多、或刚过线随时会滑下去的那批）。满分不是 600 的卷子、或本区重点线不是 500 的，改这两个数再分析 —— <strong>只影响这一次</strong>，首页的临界生人数和明细表的名单都跟着变。</p>
     </div>
     <ul class="tips">
@@ -535,7 +538,7 @@ h1,h2,h3{margin:0}
       return ask(URLS.run, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job: S.job, task: S.task || "grade", student: S.student || "",
+        body: JSON.stringify({ job: S.job, task: S.task || "grade", student: S.student || "", full: (($("full-spec") || {}).value || "").trim(),
                                 line: numParam("line-num"), band: numParam("band-num") })
       });
     }).then(function () {

@@ -332,7 +332,7 @@ class StepFailed(Exception):
     pass
 
 
-def build_steps(src, outdir, line=None, band=None):
+def build_steps(src, outdir, line=None, band=None, full=None):
     """生成流水线。line/band 不传就用 LINE_TOTAL/BAND（老调用照常能跑）。"""
     py = PYTHON
     line = LINE_TOTAL if line is None else int(line)
@@ -340,8 +340,12 @@ def build_steps(src, outdir, line=None, band=None):
 
     def cmd(*args):
         return [py] + list(args)
+    qc_full = (["--full", full] if full else [])
     return [
         {"name": "读取成绩表", "cmd": None, "side": False, "action": "cards"},
+        {"name": "数据质检",
+         "cmd": cmd("qc.py", src, "--soft", "--out-dir", outdir) + qc_full,
+         "side": False, "capture": True},
         {"name": "班级对比", "cmd": cmd("teacher_stats.py", src), "side": False},
         {"name": "学科强弱", "cmd": cmd("grade_analysis.py", src), "side": False},
         {"name": "需要盯的学生",
@@ -406,6 +410,10 @@ def build_task_steps(task, src, outdir, params=None):
 
     if task == "cards":
         steps = [{"name": "读成绩单", "cmd": None, "action": "cards", "side": False},
+                 {"name": "数据质检",
+                  "cmd": cmd("qc.py", src, "--soft", "--out-dir", outdir) +
+                         (["--full", params["full"]] if params.get("full") else []),
+                  "side": False, "capture": True},
                  {"name": "学情卡 · " + student,
                   "cmd": cmd("report_cards.py", "--xlsx", src, "student", "--name", student),
                   "side": False, "capture": True},
@@ -415,7 +423,7 @@ def build_task_steps(task, src, outdir, params=None):
                  {"name": "打包文件", "cmd": None, "action": "collect", "side": False}]
         return steps
 
-    return build_steps(src, outdir, params.get("line"), params.get("band"))
+    return build_steps(src, outdir, params.get("line"), params.get("band"), params.get("full"))
 
 
 RC_OK = 0
@@ -457,6 +465,24 @@ def collect_files(outdir, src):
             continue   # grade_deep.py 的中间统计，老师看不懂，留在目录里存档但不摆到页面上
         files.append({"name": name, "path": full, "size": human_size(os.path.getsize(full))})
     return files
+
+
+def _keep_partial(job, outdir, src):
+    """中途失败时，把已经跑出来的说明与产物落盘。
+
+    不然会出现最糟的情况：质检明明指出了问题，但流水线在后面某一步崩了，
+    页面只显示「某某这一步没跑通」，真正有用的那份清单反而没了。
+    """
+    try:
+        notes = job.get("notes") or []
+        if notes:
+            with open(os.path.join(outdir, "运行说明.txt"), "w", encoding="utf-8") as fh:
+                fh.write("\n\n".join(notes))
+        files = collect_files(outdir, src)
+        with LOCK:
+            job["files"] = files
+    except Exception:                                        # noqa: BLE001
+        pass
 
 
 def run_pipeline(job_id):
@@ -526,6 +552,7 @@ def run_pipeline(job_id):
                 })
                 job["cards"] = cards
     except StepFailed as e:
+        _keep_partial(job, outdir, src)      # 失败也要把已经跑出来的东西留住
         with LOCK:
             job["state"] = "failed"
             job["error"] = "「%s」这一步没跑通：%s" % (steps[min(i, len(steps) - 1)]["name"], e)
@@ -536,6 +563,7 @@ def run_pipeline(job_id):
             job["error"] = "「%s」跑得太久（超过 %d 秒），已经停下。" % (steps[i]["name"], STEP_TIMEOUT)
             job["steps"][i]["state"] = "failed"
     except Exception as e:                                    # noqa: BLE001 兜底，不让线程静默死掉
+        _keep_partial(job, outdir, src)
         with LOCK:
             job["state"] = "failed"
             job["error"] = "分析中途出错：%s" % e
@@ -1080,8 +1108,10 @@ class Handler(BaseHTTPRequestHandler):
         if ext and ext not in spec["accept"]:
             return self._err(400, "「%s」只认 %s，这份是 %s"
                               % (spec["label"], " / ".join(spec["accept"]), ext))
+        full_spec = str(body.get("full") or "").strip()
         steps_spec = build_task_steps(task, job["src"], job["dir"],
-                                      {"student": student, "line": line, "band": band})
+                                      {"student": student, "line": line, "band": band,
+                                       "full": full_spec})
         with LOCK:
             if job["state"] == "running":
                 return self._send(200, {"job": job_id, "state": "running",
