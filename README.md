@@ -149,6 +149,10 @@ python teacher_app.py          # Windows 也可以直接双击「启动.bat」
 工作台够日常用了；下面这些是它背后可以直接调的工具。
 
 ```bash
+# 最省事：一条命令出「哪方面不行」（集体补漏 + 某个人的讲评）
+python 一键出.py --scores 逐题得分.csv
+python 一键出.py --scores 逐题得分.csv --student 张三
+
 # 成绩分析（一条命令一张表）
 python teacher_stats.py    成绩单.xlsx
 python grade_analysis.py   成绩单.xlsx
@@ -190,6 +194,8 @@ python lesson_plan.py --kp 绝对值
 teacher_app.py      本地工作台（只监听 127.0.0.1）        ui.html     工作台界面（单文件、零外链）
 ingest.py           读表层：多 sheet / 表头容错 / 合并单元格 / 宽表转长表
                      qb.html     题库录入          score.html  逐题得分录入（键盘连打）
+
+一键出.py          一条命令出薄弱项（串起集体补漏与个体讲评）
 
 teacher_stats.py    全班统计表                    grade_analysis.py  学科强弱
 grade_deep.py       班级对比 / 临界生 / 偏科        grade_tools.py     分班分组 / 学科雷达

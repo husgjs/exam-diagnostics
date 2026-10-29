@@ -14,3 +14,4 @@ config.json
 .env
 .DS_Store
 Thumbs.db
+teaching_out/
