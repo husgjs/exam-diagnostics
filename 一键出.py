@@ -19,7 +19,9 @@ import argparse
 import contextlib
 import datetime
 import io
+import json
 import os
+import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -84,6 +86,92 @@ def _capture(fn, ns):
     return (0 if rc is None else rc), buf.getvalue()
 
 
+
+
+# ---------------- 把没见过的题收进题库 ----------------
+BANK_BAK_KEEP = 5
+BANK_SOURCE_NEW = "自编导入"
+
+
+def _rotate_bank_backup(bank_path):
+    """题库 -> .bak.1，老的往后挪，最多留 BANK_BAK_KEEP 份。"""
+    if not os.path.exists(bank_path):
+        return
+    for i in range(BANK_BAK_KEEP, 0, -1):
+        src = "%s.bak.%d" % (bank_path, i)
+        dst = "%s.bak.%d" % (bank_path, i + 1)
+        if os.path.exists(src):
+            os.replace(src, dst)
+    shutil.copy2(bank_path, bank_path + ".bak.1")
+
+
+def _write_bank(bank_path, obj):
+    """原子写：先落 .tmp，再 os.replace 一步顶上去。"""
+    tmp = bank_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, bank_path)
+
+
+def bank_add(paths, bank_path):
+    """把逐题得分表里题库没有的题号收进题库。
+
+    口径（重要的那条）：
+      · 知识点只用**表里填的那个**。表里空着就存空着，留待老师补。
+      · **不猜知识点。** 猜错比空着更糟：空着一眼能看出来，猜错看不出来。
+      · 只增不改：已在题库里的题号一律不动。
+
+    返回 (新增条数, 其中已填知识点的条数)。
+    """
+    bank = {"meta": {}, "items": []}
+    if os.path.exists(bank_path):
+        with open(bank_path, "r", encoding="utf-8") as f:
+            bank = json.load(f)
+    items = bank.setdefault("items", [])
+    known = {str(it.get("no")).strip() for it in items}
+
+    fresh = {}
+    for p in paths:
+        try:
+            rows, wide, _warn = teaching._parse_scores(p, bank)
+        except Exception as e:
+            print("  ! %s 读不了，跳过收录：%s" % (os.path.basename(p), str(e).splitlines()[0][:60]))
+            continue
+        for r in rows:
+            no = str(r.get("no") or "").strip()
+            if not no or no in known:
+                continue
+            cur = fresh.setdefault(no, {"kp": "", "full": None})
+            if not cur["kp"] and str(r.get("kp") or "").strip() not in ("", "未标注"):
+                cur["kp"] = str(r.get("kp")).strip()
+            if cur["full"] is None and r.get("full"):
+                cur["full"] = r.get("full")
+
+    if not fresh:
+        return 0, 0
+
+    _rotate_bank_backup(bank_path)
+    filled = 0
+    for no in sorted(fresh, key=lambda x: (len(x), x)):
+        v = fresh[no]
+        items.append({
+            "no": no,
+            "chapter": "",
+            "kp": v["kp"],
+            "full": int(v["full"]) if isinstance(v["full"], float) and v["full"].is_integer() else (v["full"] or 0),
+            "difficulty": "",
+            "err": "",
+            "stem": "",
+            "answer": "",
+            "options": [],
+            "source": BANK_SOURCE_NEW,
+        })
+        if v["kp"]:
+            filled += 1
+    _write_bank(bank_path, bank)
+    return len(fresh), filled
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="一条命令出薄弱项：集体补漏 +（可选）某个学生的讲评清单")
@@ -93,6 +181,8 @@ def main(argv=None):
                     help="只出这个学生的讲评清单；不给就只出集体补漏")
     ap.add_argument("--bank", default=None, help="题库.json（默认用同目录那份）")
     ap.add_argument("--out-dir", default=None, help="输出目录（默认 教师工具/输出）")
+    ap.add_argument("--bank-add", action="store_true",
+                    help="把逐题得分表里题库没有的题号收进题库（知识点只用表里填的，不猜）")
     a = ap.parse_args(argv)
 
     parts = []
@@ -125,6 +215,16 @@ def main(argv=None):
 
     print(text)
     print("已写入: %s" % path)
+    if a.bank_add:
+        bp = a.bank or os.path.join(HERE, "题库.json")
+        n_new, n_kp = bank_add(a.scores, bp)
+        if n_new:
+            print("题库新增 %d 条（知识点已填 %d 条，待补 %d 条）-> %s"
+                  % (n_new, n_kp, n_new - n_kp, bp))
+            if n_new > n_kp:
+                print("  待补的那几条知识点是空的：没有替你猜，猜错比空着更糟。")
+        else:
+            print("题库里没有新题号，不用收录。")
 
     if rc1 != 0:
         return rc1
