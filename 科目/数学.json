@@ -1,0 +1,313 @@
+{
+  "subject": "数学",
+  "model": "prereq",
+  "model_note": "前置链模型：概念之间有严格依赖，先学会 prereq 里的节点，才学得动本节点。",
+  "chapters": [
+    {
+      "id": "rat",
+      "name": "有理数",
+      "seq": null,
+      "source": "待核对人教版目录",
+      "coverage": "已建模",
+      "note": "本章知识点已建模；章序号/小节编号未与教材核对"
+    },
+    {
+      "id": "expr",
+      "name": "整式的加减",
+      "seq": null,
+      "source": "待核对人教版目录",
+      "coverage": "未覆盖",
+      "note": "仅登记章名，未建知识点"
+    },
+    {
+      "id": "eq",
+      "name": "一元一次方程",
+      "seq": null,
+      "source": "待核对人教版目录",
+      "coverage": "接口节点",
+      "note": "仅建「移项」前置链所需的接口节点，未覆盖本章"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "rat-concept",
+      "name": "有理数的概念与分类",
+      "chapter": "rat",
+      "prereq": [],
+      "aliases": [
+        "负数概念",
+        "有理数概念",
+        "有理数分类"
+      ],
+      "errs": [
+        "概念不清",
+        "分类时漏掉 0 或负数",
+        "把有限小数排除在分数之外"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-numberline",
+      "name": "数轴",
+      "chapter": "rat",
+      "prereq": [
+        "rat-concept"
+      ],
+      "aliases": [
+        "数轴",
+        "数轴与符号"
+      ],
+      "errs": [
+        "概念不清",
+        "原点/正方向/单位长度三要素缺项",
+        "描点时方向看反"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-opposite",
+      "name": "相反数",
+      "chapter": "rat",
+      "prereq": [
+        "rat-concept"
+      ],
+      "aliases": [
+        "相反数"
+      ],
+      "errs": [
+        "概念不清",
+        "与倒数定义混淆",
+        "把 -a 直接当成负数"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-reciprocal",
+      "name": "倒数",
+      "chapter": "rat",
+      "prereq": [
+        "rat-concept"
+      ],
+      "aliases": [
+        "倒数"
+      ],
+      "errs": [
+        "概念不清",
+        "与相反数混淆",
+        "忘记 0 没有倒数"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-abs",
+      "name": "绝对值",
+      "chapter": "rat",
+      "prereq": [
+        "rat-numberline",
+        "rat-opposite"
+      ],
+      "aliases": [
+        "绝对值",
+        "绝对值化简"
+      ],
+      "errs": [
+        "概念不清",
+        "去绝对值时漏讨论符号",
+        "把 |a| 写成 a"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-compare",
+      "name": "有理数的大小比较",
+      "chapter": "rat",
+      "prereq": [
+        "rat-numberline",
+        "rat-abs"
+      ],
+      "aliases": [
+        "有理数比较",
+        "有理数大小比较"
+      ],
+      "errs": [
+        "审题错误",
+        "两个负数比大小把结论写反"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-add",
+      "name": "有理数加法",
+      "chapter": "rat",
+      "prereq": [
+        "rat-abs",
+        "rat-numberline"
+      ],
+      "aliases": [
+        "有理数加法"
+      ],
+      "errs": [
+        "计算错误",
+        "异号相加时符号判错",
+        "绝对值相减顺序反了"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-sub",
+      "name": "有理数减法",
+      "chapter": "rat",
+      "prereq": [
+        "rat-add",
+        "rat-opposite"
+      ],
+      "aliases": [
+        "有理数减法"
+      ],
+      "errs": [
+        "计算错误",
+        "减号没有转成加相反数",
+        "减去负数直接写成了减"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-muldiv",
+      "name": "有理数乘除",
+      "chapter": "rat",
+      "prereq": [
+        "rat-abs",
+        "rat-reciprocal"
+      ],
+      "aliases": [
+        "有理数乘除"
+      ],
+      "errs": [
+        "计算错误",
+        "负负得正/除法符号法则用错",
+        "除以一个数没换成乘倒数"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-power",
+      "name": "有理数乘方",
+      "chapter": "rat",
+      "prereq": [
+        "rat-muldiv"
+      ],
+      "aliases": [
+        "乘方",
+        "有理数乘方"
+      ],
+      "errs": [
+        "计算错误",
+        "底数是负数时括号漏写",
+        "-2^2 与 (-2)^2 不分"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-mixed",
+      "name": "有理数混合运算",
+      "chapter": "rat",
+      "prereq": [
+        "rat-add",
+        "rat-sub",
+        "rat-muldiv",
+        "rat-power"
+      ],
+      "aliases": [
+        "有理数混合运算",
+        "运算顺序",
+        "有理数运算",
+        "新定义运算",
+        "裂项求和"
+      ],
+      "errs": [
+        "步骤遗漏",
+        "运算顺序错",
+        "跳步导致符号丢失"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-sci",
+      "name": "科学记数法与近似数",
+      "chapter": "rat",
+      "prereq": [
+        "rat-power"
+      ],
+      "aliases": [
+        "科学记数法",
+        "近似数"
+      ],
+      "errs": [
+        "概念不清",
+        "有效数字位数数错",
+        "10 的指数与小数点位数对不上"
+      ],
+      "seq": null
+    },
+    {
+      "id": "rat-app",
+      "name": "有理数的实际应用",
+      "chapter": "rat",
+      "prereq": [
+        "rat-add",
+        "rat-sub"
+      ],
+      "aliases": [
+        "有理数应用",
+        "正负数应用",
+        "数轴应用"
+      ],
+      "errs": [
+        "审题错误",
+        "把「增加/减少」的方向搞反",
+        "答案漏单位"
+      ],
+      "seq": null
+    },
+    {
+      "id": "eq-property",
+      "name": "等式性质",
+      "chapter": "eq",
+      "prereq": [
+        "rat-sub"
+      ],
+      "aliases": [
+        "等式性质"
+      ],
+      "errs": [],
+      "seq": null
+    },
+    {
+      "id": "eq-transpose",
+      "name": "一元一次方程移项",
+      "chapter": "eq",
+      "prereq": [
+        "eq-property"
+      ],
+      "aliases": [
+        "移项",
+        "一元一次方程移项"
+      ],
+      "errs": [],
+      "seq": null
+    },
+    {
+      "id": "eq-solve",
+      "name": "一元一次方程的解法",
+      "chapter": "eq",
+      "prereq": [
+        "eq-transpose"
+      ],
+      "aliases": [
+        "一元一次方程"
+      ],
+      "errs": [],
+      "seq": null
+    }
+  ]
+}

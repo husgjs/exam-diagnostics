@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""查一查：把题库和知识点树当成一个能查的知识库。
+"""查一查：按科目查知识点与题库。零依赖，不联网。
 
-为什么不做向量检索（RAG）：
-    题库是结构化的——每道题都写着题号、知识点、满分、难度、错因。
-    这种东西用题号和一串关键词直接查，又快又准，还不用装任何东西。
-    向量化是把「看不懂的数据」变成「能比距离的向量」；这批数据本来就看得懂。
-    只用 Python 标准库 + 同目录的题库.json、teaching.py 里的知识点树。
+三科的结构不一样，不能套同一个模型：
+    数学  prereq     链式：严格前置依赖，先会 A 才学得动 B
+    英语  strand     网状：词汇/语法/听说/阅读/写作几条线并行，线内可排，线间不套前置
+    语文  dimension  维度：积累/现代文/文言文/写作，彼此几乎无依赖
+
+    给语文算「前置链」会算出一个假的顺序，所以这里按 model 决定显示什么。
 """
 import argparse
 import json
@@ -20,6 +21,8 @@ except Exception:
     pass
 
 BANK = os.path.join(HERE, "题库.json")
+SUBJECT_DIR = os.path.join(HERE, "科目")
+DEFAULT_SUBJECT = "数学"
 
 
 def load_bank():
@@ -29,13 +32,36 @@ def load_bank():
         return json.load(f).get("items") or []
 
 
-def load_nodes():
-    """知识点树的正本在 teaching.py 里（teaching_out 那个是产物）。"""
+def list_subjects():
+    if not os.path.isdir(SUBJECT_DIR):
+        return []
+    return sorted(n[:-5] for n in os.listdir(SUBJECT_DIR) if n.endswith(".json"))
+
+
+def load_subject(name):
+    p = os.path.join(SUBJECT_DIR, "%s.json" % name)
+    if os.path.exists(p):
+        with open(p, encoding="utf-8") as f:
+            meta = json.load(f)
+        nodes = meta.get("nodes") or []
+        alias = {}
+        for n in nodes:
+            for k in [n.get("name"), n.get("id")] + list(n.get("aliases") or []):
+                if k:
+                    alias.setdefault(str(k), n)
+        return meta, nodes, alias
     try:
         import teaching
-        return list(teaching.NODES), dict(teaching.ALIAS)
+        nodes = list(teaching.NODES)
+        alias = {}
+        for k, v in teaching.ALIAS.items():
+            for n in nodes:
+                if n.get("id") == v:
+                    alias[k] = n
+                    break
+        return {"subject": "数学", "model": "prereq", "nodes": nodes}, nodes, alias
     except Exception:
-        return [], {}
+        return {"subject": name, "model": "prereq", "nodes": []}, [], {}
 
 
 def resolve_node(word, nodes, alias):
@@ -43,10 +69,7 @@ def resolve_node(word, nodes, alias):
     if not w:
         return None
     if w in alias:
-        nid = alias[w]
-        for n in nodes:
-            if n.get("id") == nid:
-                return n
+        return alias[w]
     for n in nodes:
         if w == n.get("name") or w == n.get("id"):
             return n
@@ -87,38 +110,61 @@ def items_of_kp(items, node):
     return [i for i in items if (i.get("kp") or "").strip() in names]
 
 
-def show_node(word, items, nodes, alias):
+def group_of(meta, node):
+    model = meta.get("model")
+    if model == "strand":
+        for s in meta.get("strands") or []:
+            if s.get("id") == node.get("strand"):
+                return ("所属线", s)
+    if model == "dimension":
+        for d in meta.get("dimensions") or []:
+            if d.get("id") == node.get("dimension"):
+                return ("所属维度", d)
+    return (None, None)
+
+
+def show_node(word, items, meta, nodes, alias):
     node = resolve_node(word, nodes, alias)
     if not node:
-        print("没找到「%s」这个知识点。" % word)
-        print("可查的：" + "、".join(n.get("name") for n in nodes))
+        print("「%s」里没找到「%s」。" % (meta.get("subject"), word))
+        if nodes:
+            print("可查的：" + "、".join(n.get("name") for n in nodes[:16]))
         return 2
+
+    model = meta.get("model")
     print("=" * 70)
-    print("%s（%s）" % (node.get("name"), node.get("chapter")))
+    print("%s ｜ %s" % (meta.get("subject"), node.get("name")))
     if node.get("aliases"):
         print("别名：%s" % "、".join(node["aliases"]))
+    if node.get("stub"):
+        print("★ " + node["stub"])
     print("=" * 70)
 
-    up = upstream(nodes, node)
-    if not up:
-        print("\n前置：没有（这是起点）")
-    else:
-        print("\n前置链（要学会它，得先会这些）：")
-        for d, n in up:
-            print("  " + "  " * d + ("└ " if d else "") + n.get("name"))
+    label, g = group_of(meta, node)
+    if label:
+        print("\n%s：%s%s" % (label, g.get("name"), ("（%s）" % g["note"]) if g.get("note") else ""))
 
-    down = downstream(nodes, node.get("id"))
-    if down:
-        print("\n它卡住会影响（这些知识点都依赖它）：")
-        print("  " + "、".join(n.get("name") for n in down))
+    if model == "prereq":
+        up = upstream(nodes, node)
+        if not up:
+            print("\n前置：没有（这是起点）")
+        else:
+            print("\n前置链（要学会它，得先会这些）：")
+            for d, n in up:
+                print("  " + "  " * d + ("└ " if d else "") + n.get("name"))
+        down = downstream(nodes, node.get("id"))
+        if down:
+            print("\n它卡住会影响：" + "、".join(n.get("name") for n in down))
+    else:
+        print("\n（这个科目不套前置链：%s）" % meta.get("model_note", "结构不同"))
 
     its = items_of_kp(items, node)
     print("\n题库里的题：%d 道" % len(its))
     if not its:
-        print("  （这个知识点还没有题——复习时得自己找题）")
+        print("  （这个知识点还没有题）")
     for i in its[:12]:
-        print("  第%-4s %s分 [%s]  %s" % (i.get("no"), i.get("full"), i.get("difficulty"),
-                                        ((i.get("stem") or "").strip() or "(题面未录)")[:46]))
+        stem = (i.get("stem") or "").strip() or "(题面未录)"
+        print("  第%-4s %s分 [%s]  %s" % (i.get("no"), i.get("full"), i.get("difficulty"), stem[:46]))
         if i.get("answer"):
             print("        答案：%s" % str(i.get("answer"))[:60])
     errs = node.get("errs") or []
@@ -129,7 +175,7 @@ def show_node(word, items, nodes, alias):
     return 0
 
 
-def show_item(no, items, nodes, alias):
+def show_item(no, items, meta, nodes, alias):
     no = str(no).strip()
     hit = [i for i in items if str(i.get("no")) == no]
     if not hit:
@@ -139,7 +185,7 @@ def show_item(no, items, nodes, alias):
     print("=" * 70)
     print("第 %s 题 ｜ %s ｜ %s 分 ｜ 难度 %s" % (i.get("no"), i.get("kp"), i.get("full"), i.get("difficulty")))
     print("=" * 70)
-    print("\n题面：" + (i.get("stem") or "(无)"))
+    print("\n题面：" + ((i.get("stem") or "").strip() or "(题面未录)"))
     for o in (i.get("options") or []):
         print("   " + str(o))
     print("\n答案：" + (i.get("answer") or "(无)"))
@@ -147,32 +193,30 @@ def show_item(no, items, nodes, alias):
         print("典型错因：" + str(i["err"]))
     node = resolve_node(i.get("kp") or "", nodes, alias)
     if node:
-        up = upstream(nodes, node)
         print("\n考的知识点：" + node.get("name"))
-        if up:
-            print("要先会：" + "、".join(n.get("name") for _d, n in up))
+        if meta.get("model") == "prereq":
+            up = upstream(nodes, node)
+            if up:
+                print("要先会：" + "、".join(n.get("name") for _d, n in up))
     return 0
 
 
-def search(word, items, nodes, alias):
+def search(word, items, meta, nodes, alias):
     w = (word or "").strip()
     if not w:
         print("给个关键词")
         return 2
-    hits = []
-    for i in items:
-        blob = " ".join(str(i.get(k) or "") for k in ("stem", "answer", "kp", "err", "no"))
-        if w in blob:
-            hits.append(i)
-    node = resolve_node(w, nodes, alias)
+    hits = [i for i in items
+            if w in " ".join(str(i.get(k) or "") for k in ("stem", "answer", "kp", "err", "no"))]
     print("=" * 70)
     print("搜「%s」：题库命中 %d 道题" % (w, len(hits)))
     print("=" * 70)
+    node = resolve_node(w, nodes, alias)
     if node:
         print("它也是一个知识点：%s（用「查一查.py %s」看详情）" % (node.get("name"), node.get("name")))
         print()
     for i in hits[:15]:
-        print("  第%-4s %-14s %s" % (i.get("no"), i.get("kp"), (i.get("stem") or "")[:50]))
+        print("  第%-4s %-14s %s" % (i.get("no"), i.get("kp"), ((i.get("stem") or "").strip() or "(题面未录)")[:48]))
     if len(hits) > 15:
         print("  …还有 %d 道" % (len(hits) - 15))
     return 0
@@ -190,50 +234,73 @@ def show_errs(items):
     return 0
 
 
-def show_list(items, nodes):
+def show_list(items, meta, nodes):
     print("=" * 70)
-    print("知识点一览（题库覆盖情况）")
+    print("%s ｜ 知识点一览（题库覆盖）" % meta.get("subject"))
     print("=" * 70)
-    for n in nodes:
-        k = len(items_of_kp(items, n))
-        mark = ("有题 %d 道" % k) if k else "★ 还没有题"
-        print("  %-16s %-10s 前置 %d 个" % (n.get("name"), mark, len(n.get("prereq") or [])))
+    model = meta.get("model")
+    if model == "strand":
+        for s in meta.get("strands") or []:
+            print("  【%s】%s" % (s.get("name"), s.get("note") or ""))
+            for n in nodes:
+                if n.get("strand") == s.get("id"):
+                    k = len(items_of_kp(items, n))
+                    print("     %-22s %s" % (n.get("name"), ("有题 %d 道" % k) if k else "还没有题"))
+    elif model == "dimension":
+        for d in meta.get("dimensions") or []:
+            print("  【%s】%s" % (d.get("name"), d.get("note") or ""))
+            for n in nodes:
+                if n.get("dimension") == d.get("id"):
+                    k = len(items_of_kp(items, n))
+                    print("     %-22s %s" % (n.get("name"), ("有题 %d 道" % k) if k else "还没有题"))
+    else:
+        for n in nodes:
+            k = len(items_of_kp(items, n))
+            print("  %-18s %-12s 前置 %d 个" % (n.get("name"),
+                                            ("有题 %d 道" % k) if k else "★ 还没有题",
+                                            len(n.get("prereq") or [])))
     return 0
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="查一查：题库 + 知识点树，零依赖")
+    subs = list_subjects()
+    ap = argparse.ArgumentParser(description="查一查：按科目查知识点与题库，零依赖")
     ap.add_argument("word", nargs="?", help="知识点名称，例如 绝对值")
-    ap.add_argument("--题", dest="no", help="看某一题的详情，例如 --题 19")
+    ap.add_argument("--科", dest="subject", default=DEFAULT_SUBJECT,
+                    help="科目（%s），默认 %s" % ("、".join(subs) or "数学", DEFAULT_SUBJECT))
+    ap.add_argument("--题", dest="no", help="看某一题的详情")
     ap.add_argument("--找", dest="kw", help="在题干/答案/知识点/错因里搜关键词")
     ap.add_argument("--错因", dest="cuo", action="store_true", help="错因分布")
-    ap.add_argument("--清单", dest="list", action="store_true", help="知识点一览与题库覆盖")
+    ap.add_argument("--清单", dest="lst", action="store_true", help="知识点一览与题库覆盖")
     a = ap.parse_args(argv)
 
     items = load_bank()
-    nodes, alias = load_nodes()
+    meta, nodes, alias = load_subject(a.subject)
     if not items:
-        print("读不到题库.json（应该和这个脚本放在同一目录）")
+        print("读不到题库.json")
         return 2
 
-    if a.list:
-        return show_list(items, nodes)
+    if a.lst:
+        return show_list(items, meta, nodes)
     if a.cuo:
         return show_errs(items)
     if a.kw:
-        return search(a.kw, items, nodes, alias)
+        return search(a.kw, items, meta, nodes, alias)
     if a.no:
-        return show_item(a.no, items, nodes, alias)
+        return show_item(a.no, items, meta, nodes, alias)
     if a.word:
-        return show_node(a.word, items, nodes, alias)
+        return show_node(a.word, items, meta, nodes, alias)
 
-    print("查一查：题库 + 知识点树，零依赖")
+    print("查一查：按科目查知识点与题库，零依赖")
     print()
-    print("  python 查一查.py 绝对值          一个知识点：前置、影响、题库里的题、常见错法")
-    print("  python 查一查.py --题 19         第 19 题")
-    print("  python 查一查.py --找 乘方        全库搜关键词")
-    print("  python 查一查.py --错因          错因分布")
-    print("  python 查一查.py --清单          16 个知识点与题库覆盖")
+    print("  科目：" + ("、".join(subs) if subs else "数学"))
+    print()
+    print("  python 查一查.py 绝对值                数学·绝对值：前置链、影响范围、题目、错法")
+    print("  python 查一查.py --科 英语             英语的线/维度与覆盖")
+    print("  python 查一查.py --科 语文 --清单      语文的维度与覆盖")
+    print("  python 查一查.py --题 19               某一题")
+    print("  python 查一查.py --找 乘方             搜关键词")
+    print("  python 查一查.py --错因                错因分布")
     return 0
 
 

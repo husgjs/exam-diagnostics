@@ -1,0 +1,52 @@
+{
+  "subject": "语文",
+  "model": "dimension",
+  "model_note": "维度模型：语文的能力是几个平行维度，几乎没有前置依赖。不要给语文算「前置链」——会算出一个假的顺序。",
+  "dimensions": [
+    {
+      "id": "accum",
+      "name": "积累",
+      "note": "字词、古诗文默写、文学常识"
+    },
+    {
+      "id": "read-cw",
+      "name": "现代文阅读",
+      "note": "文体 + 题型"
+    },
+    {
+      "id": "read-classic",
+      "name": "文言文阅读",
+      "note": "实词、虚词、翻译、断句"
+    },
+    {
+      "id": "write",
+      "name": "写作",
+      "note": "立意、结构、语言、素材"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cn-demo-1",
+      "name": "（示例）古诗文默写",
+      "dimension": "accum",
+      "prereq": [],
+      "aliases": [],
+      "errs": [
+        "错别字",
+        "上下句串了"
+      ],
+      "stub": "示例节点：请按你的教材替换或删除"
+    },
+    {
+      "id": "cn-demo-2",
+      "name": "（示例）文言实词一词多义",
+      "dimension": "read-classic",
+      "prereq": [],
+      "aliases": [],
+      "errs": [
+        "按现代汉语意思硬套"
+      ],
+      "stub": "示例节点：请按你的教材替换或删除"
+    }
+  ]
+}
